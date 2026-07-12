@@ -1,0 +1,46 @@
+/* Host renders nothing of its own — the backdrop / card layout
+ * relies entirely on the global `modal-*` classes in styles.css so the
+ * shell matches every other dialog in the app. The styles below are
+ * scoped tweaks only. */
+
+:host { display: contents; }
+
+/* Message paragraphs wrap on long sentences without overflowing the
+ * card. `modal-hint` is the default size; this nudges line-height. */
+.dialog-host-message {
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Pre-formatted detail block — used for backend reason strings, stack
+ * traces, and any text where line breaks carry meaning. Scrolls
+ * vertically rather than blowing out the card height. */
+.dialog-host-detail {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+}
+
+/* Danger title: red colour for delete / discard-changes confirmations
+ * so the user reads "this is irreversible" before the OK button. */
+.modal-title.danger { color: var(--danger, #f85149); }
+
+/* Danger OK button — paint the primary action red when the dialog
+ * confirms a destructive operation. */
+.modal-btn.primary.danger {
+  background: var(--danger, #f85149);
+  border-color: var(--danger, #f85149);
+  color: #fff;
+}
+.modal-btn.primary.danger:hover {
+  filter: brightness(1.05);
+}

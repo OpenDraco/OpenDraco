@@ -1,0 +1,32 @@
+@if (open) {
+  <div class="modal-backdrop" (click)="close.emit()">
+    <div class="modal-card modal-card-full" (click)="$event.stopPropagation()">
+      <div class="modal-title">
+        Run log · <code>{{ title || '(unknown)' }}</code>
+        @if (logFileName) {
+          <span class="log-filename-pill"
+                [title]="'User-facing text log: ' + predictionsLogsDir + '/' + logFileName">
+            {{ logFileName }}
+          </span>
+        }
+      </div>
+      <div class="modal-body log-view-body">
+        @if (loading) {
+          <div class="empty-hint">Loading event log…</div>
+        } @else if (error) {
+          <div class="error-banner">{{ error }}</div>
+        } @else if (instance) {
+          <app-inference-instance-view
+            [instance]="instance"
+            [running]="false"
+            [cancelled]="false"
+            [showThinking]="true" />
+        }
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="modal-btn primary"
+                (click)="close.emit()">Close</button>
+      </div>
+    </div>
+  </div>
+}

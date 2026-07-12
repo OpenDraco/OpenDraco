@@ -1,0 +1,18 @@
+<evo-box title="Logs" [noPad]="true" [hasActions]="true" class="logs-panel">
+  <ng-container box-actions>
+    @if (running) { <span class="spinner"></span> }
+    <evo-button size="sm" (clicked)="onClear()">Clear</evo-button>
+  </ng-container>
+  <div class="log-area" #logEl>
+    @for (line of logs; track $index) {
+      <div class="log-line">
+        @for (seg of line; track $index) {
+          <span [class]="seg.c">{{ seg.t }}</span>
+        }
+      </div>
+    }
+    @if (logs.length === 0 && !running) {
+      <div class="empty-hint">Logs will appear here once evaluation starts</div>
+    }
+  </div>
+</evo-box>

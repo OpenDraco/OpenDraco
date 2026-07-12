@@ -1,0 +1,144 @@
+:host {
+  display: flex;
+  /* Same pattern as the Evaluation page's eval-config-panel: panel is
+   * at least <baseline> px, grows (within flex) when content needs it,
+   * central column shrinks rather than overlapping.
+   *
+   * Why 400 (vs Evaluation's 340): the Results picker carries the full
+   * SWE-bench / custom instance ids in `.inst-name` (e.g. a 49-char
+   * `custom-xiangfengyepan-evomas-test-instance-fcf59bc`). The host
+   * can't *truly* grow with content because evo-box's `overflow: hidden`
+   * + the inner `overflow-y: auto` scroll containers clip the inst-
+   * name's intrinsic width before it propagates back up. So we pick a
+   * baseline that comfortably fits the longest expected id. The user
+   * can still collapse the rail to reclaim space when they don't need
+   * to browse instances. */
+  min-width: 400px;
+  flex-grow: 0;
+  flex-shrink: 0;
+  min-height: 0;
+  transition: min-width 0.18s ease, width 0.18s ease;
+}
+:host(.collapsed) { min-width: 0; width: 36px; }
+:host(.collapsed) ::ng-deep .evo-box-title { display: none; }
+:host(.collapsed) ::ng-deep .evo-box-header {
+  padding: 6px 4px;
+  justify-content: center;
+}
+
+/* Rail-style chevron toggle in the box header. Same affordance on
+ * every page's left panel. */
+.rail-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 1px 6px;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.rail-toggle:hover { color: var(--text); background: var(--bg-2); border-color: var(--border); }
+
+.left-box { flex: 1; min-height: 0; }
+.left-box ::ng-deep .evo-box-body { padding: 0; display: flex; flex-direction: column; min-height: 0; }
+
+.instance-search {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.group-toggle-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.group-toggle-row:hover { color: var(--text); }
+.group-toggle-label { user-select: none; }
+
+.instance-search-input {
+  width: 100%;
+  background: var(--bg-0);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 7px;
+  font-size: 11px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.instance-list { overflow-y: auto; flex: 1; min-height: 0; }
+
+.inst-group { border-bottom: 1px solid var(--border); }
+.inst-group:last-child { border-bottom: none; }
+.inst-group-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.inst-group-head.clickable {
+  width: 100%; border-left: none; border-right: none; cursor: pointer;
+  font-family: inherit; text-align: left;
+}
+.inst-group-head.clickable:hover { background: var(--bg-1); color: var(--text); }
+.inst-group-head .caret { color: var(--text-muted); width: 12px; }
+.inst-group-tag {
+  background: rgba(88,166,255,.12);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  padding: 0 7px;
+  font-weight: 700;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10px;
+}
+.inst-group-count {
+  background: var(--bg-0); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0 5px; font-size: 10px;
+}
+
+.inst-item {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.inst-item:hover { background: var(--bg-2); }
+.inst-item.active { background: rgba(88,166,255,.12); border-left: 3px solid var(--accent); padding-left: 7px; }
+.inst-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  /* Keep instance ids on a single line, but DO NOT clip / ellipsize —
+   * we want the longest id to push the host's intrinsic width above
+   * min-width: 280px so the central column shrinks to make room. The
+   * scrollbar (overflow-y on .evo-box-body) handles vertical
+   * overflow; horizontal grow is owned by the host's min-width rule. */
+  white-space: nowrap;
+}
+.inst-meta { display: flex; gap: 4px; margin-top: 4px; }
+.badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.badge.p { background: rgba(88,166,255,.15); color: var(--accent); }
+.badge.e { background: rgba(86,211,100,.15); color: var(--success); }
+
+.empty-hint {
+  padding: 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}

@@ -1,0 +1,157 @@
+{
+  "id": "Lingma_SWE_GPT",
+  "source_csv": "Lingma_SWE_GPT.csv",
+  "agents": [
+    {
+      "name": "agent_proxy",
+      "agent_type": "Helper/Proxy",
+      "short_description": "A proxy agent. Process raw response into json format.",
+      "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/agent_proxy.py#L1",
+      "prompts": {},
+      "tools": []
+    },
+    {
+      "name": "agent_write_patch",
+      "agent_type": "Patcher",
+      "short_description": "An agent, which is only responsible for the write_patch tool call.",
+      "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/agent_write_patch.py#L1",
+      "prompts": {
+        "user": "Write a patch for the issue, based on the retrieved context. You can import necessary libraries.\nReturn the patch in the format below. Within <file></file>, replace \"...\" with actual file path. Within <original></original>, replace \"...\" with the original code snippet from the program. If the original code snippet is too long, you can modify it in multiple sections. Be careful not to modify too long original code at one time to avoid errors. In addition, the original code snippet must not be abbreviated (such as ...), otherwise it cannot be matched to the original location. Within <patched></patched>, replace \"...\" with the fixed version of the original code. When adding orignal code and updated code, pay attention to indentation, as the code is in Python.\nYou can write multiple modifications if needed. \n\n# modification 1\n```python\n<file>...</file>\n<original>...</original>\n<patched>...</patched>\n```\n\n# modification 2\n```python\n<file>...</file>\n<original>...</original>\n<patched>...</patched>\n```\n\n# modification 3\n...\n"
+      },
+      "tools": []
+    },
+    {
+      "name": "ProjectApiManager (Orchestrator)",
+      "agent_type": "Router",
+      "short_description": "Manager that import agent_proxy and agent_write_patch. Define the (tools) search tools (search api) + write path tool",
+      "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L28",
+      "prompts": {},
+      "tools": [
+        {
+          "name": "search_class",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L779"
+        },
+        {
+          "name": "search_class_in_file",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L795"
+        },
+        {
+          "name": "search_method_in_file",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L812"
+        },
+        {
+          "name": "search_method_in_class",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L829"
+        },
+        {
+          "name": "search_method",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L846"
+        },
+        {
+          "name": "search_code",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L860"
+        },
+        {
+          "name": "search_code_in_file",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L874"
+        },
+        {
+          "name": "write_patch",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L890"
+        }
+      ]
+    },
+    {
+      "name": "ProjectApiManager (Patcher)",
+      "agent_type": "Patcher",
+      "short_description": "Manager that import agent_proxy and agent_write_patch. Define the (tools) search tools (search api) + write path tool",
+      "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L28",
+      "prompts": {},
+      "tools": [
+        {
+          "name": "search_class",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L779"
+        },
+        {
+          "name": "search_class_in_file",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L795"
+        },
+        {
+          "name": "search_method_in_file",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L812"
+        },
+        {
+          "name": "search_method_in_class",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L829"
+        },
+        {
+          "name": "search_method",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L846"
+        },
+        {
+          "name": "search_code",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L860"
+        },
+        {
+          "name": "search_code_in_file",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L874"
+        },
+        {
+          "name": "write_patch",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L890"
+        }
+      ]
+    },
+    {
+      "name": "ProjectApiManager (Helper/Proxy)",
+      "agent_type": "Helper/Proxy",
+      "short_description": "Manager that import agent_proxy and agent_write_patch. Define the (tools) search tools (search api) + write path tool",
+      "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L28",
+      "prompts": {},
+      "tools": [
+        {
+          "name": "search_class",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L779"
+        },
+        {
+          "name": "search_class_in_file",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L795"
+        },
+        {
+          "name": "search_method_in_file",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L812"
+        },
+        {
+          "name": "search_method_in_class",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L829"
+        },
+        {
+          "name": "search_method",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L846"
+        },
+        {
+          "name": "search_code",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L860"
+        },
+        {
+          "name": "search_code_in_file",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L874"
+        },
+        {
+          "name": "write_patch",
+          "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/manage.py#L890"
+        }
+      ]
+    },
+    {
+      "name": "agent_locate_file_class_func",
+      "agent_type": "Locator",
+      "short_description": "Agent that is responsability is to use the description or logs in the issue to locate the code files that need to be modified.",
+      "source_url": "https://github.com/LingmaTongyi/Lingma-SWE-GPT/blob/888e87dd65a59c84555a04eeb85856cf5fa83936/app/api/agent_locate_file_class_func.py#L1",
+      "prompts": {
+        "proxy": "Please look through the following GitHub Problem Description and the Skeleton of Relevant Files.\nIdentify all locations that need inspection or editing to fix the problem, including directly related areas as well as any potentially related functions, classes, and global code snippets.\nFor each location you provide, either give the name of the class, the name of a function, or the global code snippets from a region in the original text.\n\n## GitHub Problem Description ##\n{problem_statement}\n\n## Skeleton of Relevant Files ##\n{file_contents}\n\n##\n\nPlease provide the complete set of locations as either a class name, a function name, or a global code snippet from a region in the original text.\nNote that if you include a class, you do not need to list its specific methods. Please note that the global code snippet usually does not exceed three lines.\nYou can include either the entire class or don't include the class name and instead include specific methods in the class.\nOUTPUT AT MOST 10 LOCATIONS that need to be modified in their workspace and sort them by modification priority.\n\nPlease respond according to the JSON format in Response Example.\n## Response Example:\n{{\n    \"reason\": \"To resloved this issue, xxx. (Here please analyze possible fault locations step by step and output your chain-of-thought)\",\n    \"bug_locations\": [\n        {{\"file\": \"file path\", \"class\": \"class name\", \"method\": \"function name\"}},\n        {{\"file\": \"file path\", \"class\": \"class name\"}},\n        {{\"file\": \"file path\", \"code_snippets\": \"code snippet from the original text\"}}\n    ]\n}}\n\nReturn just in JSON format.\n"
+      },
+      "tools": []
+    }
+  ]
+}

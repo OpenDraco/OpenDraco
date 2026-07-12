@@ -1,0 +1,82 @@
+<evo-box title="Prediction" [hasActions]="true" class="inner-box">
+  <ng-container box-actions>
+    <evo-button size="sm" [disabled]="!prediction" (clicked)="downloadPrediction.emit()"><ng-icon name="download" /> JSONL</evo-button>
+    <evo-button size="sm" [disabled]="!prediction"
+                title="Reveal the .jsonl file in the OS file explorer"
+                (clicked)="reveal.emit(selectedPredFile?.path)"><ng-icon name="folder" /> JSONL</evo-button>
+    <evo-button size="sm" [disabled]="!predictionLog || predictionLogMissing"
+                title="Download the NDJSON SSE-event transcript saved when the prediction was generated"
+                (clicked)="downloadPredictionLog.emit()"><ng-icon name="download" /> Log</evo-button>
+    <evo-button size="sm" [disabled]="!predictionLogPath"
+                title="Reveal the .log file in the OS file explorer"
+                (clicked)="reveal.emit(predictionLogPath)"><ng-icon name="folder" /> Log</evo-button>
+    <evo-button size="sm" [disabled]="!selectedPredFile"
+                title="Render the run's NDJSON event log as agent cards + hand-off chips — same view as the Inference page."
+                (clicked)="openLogViewer.emit()"><ng-icon name="eye" /> View</evo-button>
+  </ng-container>
+  @if (!prediction) {
+    <div class="empty-hint">No prediction selected</div>
+  } @else {
+    <div class="kv">
+      <div class="k">File</div>
+      <div class="v mono small" [title]="prediction.name">{{ prediction.name }}</div>
+    </div>
+    <div class="kv">
+      <div class="k">Start of inference</div>
+      <div class="v small">{{ predictionTimestamp }}</div>
+    </div>
+    <div class="kv">
+      <div class="k">End of inference</div>
+      <div class="v small">
+        {{ predictionEndTimestamp }}
+        @if (predictionDuration) {
+          <span class="duration">· {{ predictionDuration }}</span>
+        }
+      </div>
+    </div>
+    <div class="kv">
+      <div class="k">Config used</div>
+      <div class="v mono small" [title]="predictionConfigUsed">{{ predictionConfigUsed }}</div>
+    </div>
+    @if (prediction.data.tokens && prediction.data.tokens.total > 0) {
+      <div class="kv">
+        <div class="k">LLM tokens</div>
+        <div class="v mono small"
+             [title]="'input = prompt + context tokens sent to the model · output = generated tokens · total = input + output'">
+          in {{ prediction.data.tokens.input | number }}
+          · out {{ prediction.data.tokens.output | number }}
+          · total <strong>{{ prediction.data.tokens.total | number }}</strong>
+        </div>
+      </div>
+    }
+    <div class="section-label">model_patch</div>
+    @if (prediction.data.model_patch) {
+      <pre class="diff-view">@for (ln of diffLines; track $index) {<span [class]="ln.cls">{{ ln.line }}
+</span>}</pre>
+    } @else {
+      <pre class="patch-view">(empty)</pre>
+    }
+
+    <div class="logs-toggle-row">
+      <label class="field-label">Show run log (events)</label>
+      <evo-switch [ngModel]="showPredictionLog" (ngModelChange)="togglePredictionLog.emit($any($event))" />
+    </div>
+    @if (showPredictionLog) {
+      @if (predictionLogMissing) {
+        <div class="empty-state">
+          <div class="empty-title">No log saved for this prediction.</div>
+          <div class="empty-body">
+            Predictions generated before the log writer landed don't carry a
+            transcript. Run inference again to get a <code>.log</code> sidecar.
+          </div>
+        </div>
+      } @else if (predictionLog === null) {
+        <div class="empty-hint">Loading log…</div>
+      } @else if (predictionLog === '') {
+        <div class="empty-hint">(empty)</div>
+      } @else {
+        <pre class="log-view raw-log">{{ predictionLog }}</pre>
+      }
+    }
+  }
+</evo-box>

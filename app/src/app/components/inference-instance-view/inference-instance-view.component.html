@@ -1,0 +1,213 @@
+<!-- Status line. Driven by the live page; the Results modal passes empty
+     statusMsg + running=false and this section collapses. -->
+@if (statusMsg && running) {
+  <div class="status-line is-running">
+    <span class="spinner"></span>
+    {{ statusMsg }}
+  </div>
+}
+
+<!-- Per-instance status placeholder. Shows when the focused instance has
+     no logs yet (queued, cancelled, errored without events, or done with
+     zero per-agent events). -->
+@if (instance && cards.length === 0 && !finalPatch && instance.status !== 'running') {
+  <div class="instance-placeholder" [class]="'placeholder-' + instance.status">
+    @switch (instance.status) {
+      @case ('queued') {
+        <span class="ph-icon"><ng-icon name="hourglass" /></span>
+        <span class="ph-text">
+          Waiting for execution… <code>{{ instance.instance_id }}</code> is queued.
+        </span>
+      }
+      @case ('cancelled') {
+        <span class="ph-icon"><ng-icon name="stop" /></span>
+        <span class="ph-text">
+          Cancelled before <code>{{ instance.instance_id }}</code> started running.
+        </span>
+      }
+      @case ('error') {
+        <span class="ph-icon"><ng-icon name="warn" /></span>
+        <span class="ph-text">
+          <code>{{ instance.instance_id }}</code> errored without producing any logs.
+        </span>
+      }
+      @case ('done') {
+        <span class="ph-icon"><ng-icon name="check" /></span>
+        <span class="ph-text">
+          <code>{{ instance.instance_id }}</code> completed without per-agent events.
+        </span>
+      }
+    }
+  </div>
+}
+
+@if (errorMsg) {
+  <div class="error-block">
+    <div class="error-title">Error</div>
+    <div class="error-body">{{ errorMsg }}</div>
+    @if (errorTraceback && showThinking) {
+      <pre class="error-trace">{{ errorTraceback }}</pre>
+    }
+  </div>
+}
+
+@for (card of cards; track $index) {
+  @for (chip of handoffsFor(card); track $index) {
+    <button type="button"
+            class="handoff-chip"
+            (click)="openHandoffPreview(chip)"
+            [title]="chip.from + ' → ' + chip.to + ' · ' + chip.summary + ' (click for full payload)'">
+      <span class="hc-from">{{ chip.from }}</span>
+      <span class="hc-arrow">-&gt;</span>
+      <span class="hc-to">{{ chip.to }}</span>
+      <span class="hc-summary">({{ chip.summary }})</span>
+    </button>
+  }
+  <div class="agent-card" [class.expanded]="card.expanded">
+    <div class="card-header" (click)="toggleCard(card)">
+      <div class="card-dot" [style.background]="card.color"></div>
+      <span class="card-name">{{ card.label }}</span>
+      @if (card.status === 'running') {
+        <evo-badge variant="warn">running</evo-badge>
+      } @else {
+        <evo-badge variant="ok">done</evo-badge>
+      }
+      @if (cardDuration(card); as d) {
+        <span class="card-duration"
+              [title]="'Wall-clock time this agent spent executing'">
+          {{ d }}
+        </span>
+      }
+      <ng-icon class="card-chevron" [name]="card.expanded ? 'chevronDown' : 'chevronRight'" />
+    </div>
+    @if (card.expanded) {
+      <div class="card-body">
+        @if (inputKeys(card.inputs).length > 0) {
+          <div class="delta-field">
+            <div class="delta-key input-key">inputs</div>
+            <div class="tool-list">
+              @for (k of inputKeys(card.inputs); track k) {
+                <div class="tool-row">
+                  <span class="tool-name">{{ k }}</span>
+                  <span class="tool-args">{{ inputPreview(card.inputs[k]) }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+        @if (card.toolCalls.length > 0) {
+          <div class="delta-field">
+            <div class="delta-key tool-key">tools</div>
+            <div class="tool-list">
+              @for (tc of card.toolCalls; track $index) {
+                <div class="tool-row">
+                  <span class="tool-name">{{ tc.tool }}</span>
+                  @if (tc.argsPreview) {
+                    <span class="tool-args">{{ tc.argsPreview }}</span>
+                  }
+                  <span class="tool-result">→ {{ tc.resultPreview }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+        @if (showThinking && card.thinkingStream) {
+          <div class="delta-field">
+            <div class="delta-key think-key">thinking</div>
+            <pre class="delta-code think-stream">{{ card.thinkingStream }}</pre>
+          </div>
+        }
+        @if (card.responseStream) {
+          <div class="delta-field">
+            <div class="delta-key response-key">response</div>
+            <pre class="delta-code response-stream">{{ card.responseStream }}</pre>
+          </div>
+        }
+        @for (f of formatDelta(card.delta, card.agent); track f.key) {
+          <div class="delta-field">
+            <div class="delta-key">{{ f.key }}</div>
+            @if (f.type === 'code' || f.type === 'json') {
+              <pre class="delta-code">{{ f.value }}</pre>
+            } @else {
+              <div class="delta-text">{{ f.value }}</div>
+            }
+          </div>
+        }
+        @if (card.toolCalls.length === 0 && !card.thinkingStream && !card.responseStream && formatDelta(card.delta, card.agent).length === 0 && inputKeys(card.inputs).length === 0) {
+          <div class="empty-card-hint">routing</div>
+        }
+        @if (card.tokens) {
+          <div class="agent-tokens">
+            <span class="tk-label">tokens</span>
+            <span class="tk-in">in {{ card.tokens.input }}</span>
+            <span class="tk-out">out {{ card.tokens.output }}</span>
+            <span class="tk-total">total {{ card.tokens.total }}</span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+}
+
+@if (running && cards.length > 0) {
+  <div class="running-row">
+    <span class="spinner"></span> Agent running…
+  </div>
+}
+
+@if (finalPatch) {
+  <div class="final-block">
+    <div class="final-header">
+      Final Patch
+      @if (outputPath) { <span class="output-path">→ {{ outputPath }}</span> }
+    </div>
+    <pre class="diff-view">@for (ln of formatDiff(finalPatch); track $index) {<span [class]="ln.cls">{{ ln.line }}
+</span>}</pre>
+  </div>
+}
+
+@if (cancelled) {
+  <div class="cancelled-row">Cancelled</div>
+}
+
+<!-- Hand-off preview modal — opened by clicking a chip between two agent
+     cards. Shows the full state-slot payload that the upstream agent
+     passed to the downstream one (capped at 16 KB on the server). -->
+@if (handoffPreview) {
+  <div class="modal-backdrop" (click)="closeHandoffPreview()">
+    <div class="modal-card handoff-modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-title">
+        Hand-off <code>{{ handoffPreview.from }}</code> → <code>{{ handoffPreview.to }}</code>
+      </div>
+      <div class="modal-body">
+        <div class="handoff-meta">
+          <span class="handoff-meta-pill">{{ handoffPreview.summary }}</span>
+          @if (handoffPreview.timestamp) {
+            <span class="handoff-meta-pill">{{ handoffPreview.timestamp }}</span>
+          }
+        </div>
+
+        <div class="handoff-section-label">
+          Source <code>{{ handoffPreview.from }}</code> produced
+        </div>
+        <pre class="handoff-preview-body">{{ handoffPreview.preview }}</pre>
+
+        <div class="handoff-section-label">
+          Target <code>{{ handoffPreview.to }}</code> received
+        </div>
+        @if (targetReceived(handoffPreview); as received) {
+          <pre class="handoff-preview-body">{{ received }}</pre>
+        } @else {
+          <div class="handoff-empty-hint">
+            (source produced no payload — the receiver will see an empty
+            `state[{{ handoffPreview.from }}]`)
+          </div>
+        }
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn primary" type="button"
+                (click)="closeHandoffPreview()">Close</button>
+      </div>
+    </div>
+  </div>
+}

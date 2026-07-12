@@ -1,0 +1,182 @@
+/* ─── Host fills page-content ────────────────────────────── */
+:host {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Save-error modal: wraps the backend's reason string in a readable
+ * monospace block. Long detail messages stay scrollable horizontally
+ * inside the card rather than blowing out the modal width. */
+.save-error-detail {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+}
+
+/* ─── Main layout ────────────────────────────────────────── */
+.topo-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  gap: 8px;
+  padding: 8px;
+}
+
+/* ─── Center column ──────────────────────────────────────── */
+.center-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  /* Query container so the toolbar can collapse based on the real width
+   * it's given (rails open/collapsed + screen size) rather than guessing
+   * from rail state alone — see the @container rules in the toolbar CSS. */
+  container-type: inline-size;
+  container-name: topoCenter;
+}
+
+/* ─── Graph canvas ───────────────────────────────────────── */
+/* `.graph-area` is the positioned parent that lets `.graph-error` overlay
+ * the cytoscape host. The host stays mounted + visible always so cytoscape
+ * has stable dimensions to measure. */
+.graph-area {
+  flex: 1;
+  position: relative;
+  display: flex;
+  min-height: 0;
+}
+/* `.graph-stack` owns the rounded border + overflow:hidden clip so the
+ * starfield/grid background and the cytoscape mount share the same
+ * rounded edge. `.bg-*` are siblings of `.graph-wrap` here — the bg
+ * MUST live outside `#graphEl` because `cy.destroy()` on Reload wipes
+ * every child of its container, and we want the bg to survive. */
+.graph-stack {
+  flex: 1;
+  position: relative;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+}
+.graph-wrap {
+  flex: 1;
+  position: relative;
+  /* Above the starfield AND the SVG grid layer so cytoscape's canvas
+   * receives all clicks/drags. Grid SVG is z-index:1, starfield is 0. */
+  z-index: 2;
+  min-height: 0;
+  background: transparent;
+}
+
+/* ─── World-space SVG canvas (starfield tile + grid) ─────────────
+ * Sibling of `.graph-wrap`, sits below the cytoscape canvas. The
+ * <g class="grid-world"> inside the SVG is transformed by
+ * `gridTransform` on every cy pan/zoom tick, so all three patterns
+ * (starfield, dots, crosses) move + scale in lock-step with the
+ * graph — they live in cytoscape's world space. Patterns repeat
+ * infinitely; the cover-rects use visWorld so they always span
+ * exactly the visible region. `pointer-events: none` (set here AND
+ * on the inner <g> per spec) lets the cytoscape host above receive
+ * every click/drag. */
+.graph-grid-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  /* Subtle CRT-style brightness so the dots + crosses don't tint the
+   * starfield when they overlap. Display block strips inline-baseline
+   * whitespace under the SVG. */
+  display: block;
+}
+.graph-grid-svg .grid-world { pointer-events: none; }
+/* Soft blur on JUST the sky cover-rect — leaves the dots + crosses
+ * grid sharp on top, but smears the stars/clouds into a dreamier
+ * backdrop. Applied via CSS filter so the blur radius stays in
+ * screen pixels regardless of cy zoom (an SVG feGaussianBlur with
+ * stdDeviation in world units would scale with zoom, which looks
+ * weird when zooming in). Tune the radius via the value below. */
+.graph-grid-svg .bg-sky-rect {
+  filter: blur(1px);
+}
+
+.graph-error {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  background: rgba(13, 17, 23, 0.92);   /* opaque-ish so the graph behind doesn't bleed through */
+  border: 1px dashed rgba(248,81,73,.45);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  z-index: 5;
+}
+.graph-error-title { color: var(--danger); font-size: 14px; font-weight: 600; }
+.graph-error-body  { color: var(--text); font-size: 12px; word-break: break-word; max-width: 560px; }
+.graph-error-hint  { color: var(--text-muted); font-size: 11px; }
+
+/* ─── On-canvas zoom controls (overlay) ──────────────────── */
+/* Sits in the bottom-right corner of `.graph-area`; the toolbar's
+ * page-level Fit/Relayout buttons remain — this is the quick in-graph
+ * control with a live percentage readout. */
+.graph__controls {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(13, 17, 23, 0.78);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  z-index: 4;
+  user-select: none;
+}
+.graph__controls .iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.graph__controls .iconbtn:hover {
+  background: var(--bg-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+.graph__controls .iconbtn:active { background: var(--bg-0); }
+.graph__controls .zoom-readout {
+  min-width: 38px;
+  padding: 0 6px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.graph__controls .zoom-readout span { margin-left: 1px; color: var(--text-muted); opacity: 0.7; }

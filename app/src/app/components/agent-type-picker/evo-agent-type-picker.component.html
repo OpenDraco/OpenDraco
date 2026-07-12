@@ -1,0 +1,32 @@
+<div #host class="atp-host" [class.disabled]="!draggable">
+  <div class="atp-chip"
+       [style.border-color]="color"
+       [style.color]="color"
+       [attr.draggable]="draggable ? 'true' : null"
+       [title]="selectedVariant?.description || agentType"
+       (dragstart)="onDragStart($event)">
+    <span class="atp-label">{{ chipLabel }}</span>
+    <button type="button"
+            class="atp-caret"
+            [style.color]="color"
+            [title]="variants.length + ' variant(s) available'"
+            (click)="toggleOpen($event)">▾</button>
+  </div>
+
+  @if (open && variants.length) {
+    <div class="atp-menu" role="listbox" [style]="menuStyle">
+      @for (v of variants; track v.key) {
+        <button type="button"
+                class="atp-item"
+                [class.active]="v.key === selectedVariantKey"
+                [title]="v.description"
+                (click)="pickVariant(v, $event)">
+          <span class="atp-item-label">{{ v.label }}</span>
+          @if (v.description) {
+            <span class="atp-item-desc">{{ v.description }}</span>
+          }
+        </button>
+      }
+    </div>
+  }
+</div>

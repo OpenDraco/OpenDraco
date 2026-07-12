@@ -1,0 +1,88 @@
+<evo-box title="Evaluation" [hasActions]="true" class="inner-box">
+  <ng-container box-actions>
+    <evo-button size="sm" [disabled]="!evaluation" (clicked)="downloadZip.emit()"><ng-icon name="download" /> Download (zip)</evo-button>
+    <evo-button size="sm" [disabled]="!evaluation?.summary_path"
+                title="Reveal the cross-model summary JSON in the OS file explorer"
+                (clicked)="reveal.emit(evaluation?.summary_path)"><ng-icon name="folder" /> summary.json</evo-button>
+    <evo-button size="sm" [disabled]="!evaluation?.run_dir"
+                title="Reveal the run's logs/run_evaluation/<run_id> folder in the OS file explorer"
+                (clicked)="reveal.emit(evaluation?.run_dir)"><ng-icon name="folder" /> run dir</evo-button>
+  </ng-container>
+  @if (!selectedEvalDir) {
+    <div class="empty-state">
+      <div class="empty-title">No evaluation has been run for this prediction yet.</div>
+      <div class="empty-body">
+        Head to the
+        <a class="empty-link"
+           [class.disabled]="!selectedPredFile?.path"
+           (click)="goEvaluate.emit()"
+           title="Go to the Evaluation page with this prediction file pre-selected. Click Run there to start the harness.">Evaluation</a>
+        page and run the harness against
+        <code>{{ selectedPredFile?.name }}</code>. The result will show up here automatically.
+      </div>
+    </div>
+  } @else if (!evaluation) {
+    <div class="empty-hint">Loading evaluation…</div>
+  } @else {
+    <div class="kv">
+      <div class="k">Resolved</div>
+      <div class="v">
+        @if (resolvedFlag === true)  { <span class="pill ok">resolved</span> }
+        @else if (resolvedFlag === false) { <span class="pill err">unresolved</span> }
+        @else { <span class="pill">—</span> }
+      </div>
+    </div>
+    @if (testStatus) {
+      <div class="section-label">Tests</div>
+      <table class="tests-table">
+        <tr><th>Group</th><th>passed</th><th>failed</th></tr>
+        @for (row of testStatus; track row.group) {
+          <tr>
+            <td class="mono">{{ row.group }}</td>
+            <td class="passed">{{ row.passed }}</td>
+            <td [class.failed]="row.failed > 0">{{ row.failed }}</td>
+          </tr>
+        }
+      </table>
+    }
+
+    <div class="logs-toggle-row">
+      <label class="field-label">Show evaluation logs</label>
+      <evo-switch [ngModel]="showLogs" (ngModelChange)="toggleLogs.emit($any($event))" />
+    </div>
+
+    @if (showLogs) {
+      <div class="log-tabs">
+        <button class="tab" [class.active]="activeLog === 'run_instance.log'" (click)="setActiveLog.emit('run_instance.log')">run_instance.log</button>
+        <button class="tab" [class.active]="activeLog === 'test_output.txt'" (click)="setActiveLog.emit('test_output.txt')">test_output.txt</button>
+        @if (!isCustomInstance) {
+          <button class="tab" [class.active]="activeLog === 'eval.sh'"          (click)="setActiveLog.emit('eval.sh')">eval.sh</button>
+        }
+        <button class="tab" [class.active]="activeLog === 'patch.diff'"       (click)="setActiveLog.emit('patch.diff')">patch.diff</button>
+        <button class="tab" [class.active]="activeLog === 'report.json'"      (click)="setActiveLog.emit('report.json')">report.json</button>
+        <span class="grow"></span>
+        <evo-button size="sm" [disabled]="!logContent" (clicked)="downloadLog.emit()"><ng-icon name="download" /></evo-button>
+      </div>
+      <div class="log-view">
+        @if (isCustomInstance && activeLog === 'eval.sh') {
+          <div class="log-line"><span class="sl-dim">
+            eval.sh is not generated for custom-repo evaluations &mdash;
+            pytest is invoked directly against the cloned workspace.
+          </span></div>
+        } @else if (loadingLog) {
+          <div class="log-line"><span class="sl-dim">Loading…</span></div>
+        } @else if (!logContent) {
+          <div class="log-line"><span class="sl-dim">(empty)</span></div>
+        } @else {
+          @for (line of coloredLog; track $index) {
+            <div class="log-line">
+              @for (seg of line; track $index) {
+                <span [class]="seg.c">{{ seg.t }}</span>
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+  }
+</evo-box>

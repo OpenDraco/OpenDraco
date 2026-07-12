@@ -1,0 +1,127 @@
+<evo-box class="left-box" title="Instances" [hasActions]="true">
+  <ng-container box-actions>
+    @if (!collapsed()) {
+      @if (instancesTotal) {
+        <span class="count-chip">{{ instancesTotal }}</span>
+      }
+      <evo-button size="sm"
+                  [variant]="customFormOpen ? 'active' : 'default'"
+                  (clicked)="toggleCustomForm.emit()"
+                  title="Add a public GitHub repo + problem statement as a custom instance. Inference-only — the SWE-bench evaluation harness can't score these.">
+        + Custom
+      </evo-button>
+      <evo-button size="sm" [disabled]="refreshing"
+                  (clicked)="refreshAll.emit()"
+                  title="Re-pull every SWE-bench subset (Lite + Full + Verified) and split from HuggingFace. Slow — Full alone is thousands of instances.">
+        @if (refreshing) { <ng-icon name="refresh" />… } @else { <ng-icon name="refresh" /> }
+      </evo-button>
+    }
+    <button type="button" class="rail-toggle"
+            (click)="toggleCollapsed()"
+            [title]="collapsed() ? 'Expand panel' : 'Collapse panel'"
+            [attr.aria-expanded]="!collapsed()">
+      {{ collapsed() ? '»' : '«' }}
+    </button>
+  </ng-container>
+
+  @if (!collapsed()) {
+  <div class="instance-search">
+    <input type="text" placeholder="Filter…"
+           [ngModel]="search"
+           (ngModelChange)="onSearch($event)"
+           style="width:100%" />
+  </div>
+
+  <div class="select-actions">
+    <button class="link-btn" type="button" (click)="selectAllVisible.emit()">Select visible</button>
+    <span class="dot-sep">·</span>
+    <button class="link-btn" type="button" (click)="clearSelection.emit()">Clear</button>
+    @if (selectionCount > 0) {
+      <span class="sel-count">{{ selectionCount }} selected</span>
+    }
+  </div>
+
+  @if (refreshError) {
+    <div class="err-banner">{{ refreshError }}</div>
+  }
+
+  <div class="instance-list">
+    @for (subset of subsets; track subset) {
+      <div class="subset-group">
+        <button class="group-header subset-header" type="button" (click)="toggleSubset.emit(subset)">
+          <ng-icon class="caret" [name]="isSubsetOpen(subset) ? 'chevronDown' : 'chevronRight'" />
+          <span class="group-name">{{ subsetLabel(subset) }}</span>
+          <span class="group-count">{{ countIn(subset) }}</span>
+          <span class="grow"></span>
+          <button class="leaf-select" type="button"
+                  [class.checked]="isSubsetAllSelected(subset)"
+                  [title]="(isSubsetAllSelected(subset) ? 'Deselect ' : 'Select ') + 'every ' + subsetLabel(subset) + ' instance'"
+                  (click)="$event.stopPropagation(); toggleSubsetSelect.emit(subset)">
+            <ng-icon [name]="isSubsetAllSelected(subset) ? 'squareChecked' : 'square'" />
+          </button>
+          @if (canRefreshSubset(subset)) {
+            <button class="leaf-refresh" type="button"
+                    [disabled]="refreshing"
+                    [title]="'Pull every ' + subsetLabel(subset) + ' split from HuggingFace'"
+                    (click)="$event.stopPropagation(); refreshSubset.emit(subset)"><ng-icon name="refresh" /></button>
+          }
+        </button>
+
+        @if (isSubsetOpen(subset)) {
+          @for (split of splitsFor(subset); track split) {
+            @let leaf = instancesIn(subset, split);
+            <div class="split-group">
+              <button class="group-header split-header" type="button"
+                      (click)="toggleSplit.emit({ subset, split })">
+                <ng-icon class="caret" [name]="isSplitOpen(subset, split) ? 'chevronDown' : 'chevronRight'" />
+                <span class="group-name">{{ split }}</span>
+                <span class="group-count">{{ leaf.length }}</span>
+                <span class="grow"></span>
+                <button class="leaf-select" type="button"
+                        [disabled]="leaf.length === 0"
+                        [class.checked]="isSplitAllSelected(subset, split)"
+                        [title]="(isSplitAllSelected(subset, split) ? 'Deselect ' : 'Select ') + 'every ' + subsetLabel(subset) + '/' + split + ' instance'"
+                        (click)="$event.stopPropagation(); toggleSplitSelect.emit({ subset, split })">
+                  <ng-icon [name]="isSplitAllSelected(subset, split) ? 'squareChecked' : 'square'" />
+                </button>
+                @if (canRefreshSubset(subset)) {
+                  <button class="leaf-refresh" type="button"
+                          [disabled]="refreshing"
+                          [title]="'Pull SWE-bench ' + subsetLabel(subset) + ' / ' + split + ' from HuggingFace'"
+                          (click)="$event.stopPropagation(); refreshLeaf.emit({ subset, split })"><ng-icon name="refresh" /></button>
+                }
+              </button>
+
+              @if (isSplitOpen(subset, split)) {
+                @if (leaf.length === 0) {
+                  @if (canRefreshSubset(subset)) {
+                    <div class="empty-hint sm">— empty (use ↻ to pull) —</div>
+                  } @else {
+                    <div class="empty-hint sm">— empty (use + Custom to add a repo) —</div>
+                  }
+                } @else {
+                  @for (inst of leaf; track inst.instance_id) {
+                    <label class="instance-item" [class.selected]="isSelected(inst.instance_id)">
+                      <input type="checkbox"
+                             [checked]="isSelected(inst.instance_id)"
+                             (change)="toggleInstance.emit(inst.instance_id)" />
+                      <div class="inst-meta">
+                        <div class="inst-id">{{ inst.instance_id }}</div>
+                        <div class="inst-repo">{{ inst.repo }}</div>
+                      </div>
+                    </label>
+                  }
+                }
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+    @if (instances.length === 0 && !loadingInstances) {
+      <div class="empty-hint">No instances loaded</div>
+    }
+  </div>
+  }
+
+</evo-box>

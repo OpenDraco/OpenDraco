@@ -1,0 +1,421 @@
+/* The host doesn't participate in layout — it just hosts the fixed
+ * backdrop + panel. Without `display: contents` the component's
+ * default inline-block box would sit inside the topology page's flex
+ * container and could shift other elements when the panel opens. */
+:host { display: contents; }
+
+/* ng-icon renders an inline SVG; size it relative to the surrounding
+ * text so it stays visually balanced inside buttons + pills without
+ * blowing out their height. `currentColor` lets every icon inherit
+ * the button-state colour (muted by default, accent on active /
+ * hover) without per-icon CSS.
+ *
+ * `display: inline-flex` + explicit 1em × 1em box + `flex-shrink: 0`
+ * keeps the SVG strictly inside its declared bounds. Without the
+ * explicit box, ng-icon's SVG could overflow upward (its internal
+ * viewBox starts at y=2 for some heroicons) and clip against tight
+ * button padding. The `svg` rule below pins the SVG to the box. */
+ng-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  font-size: 14px;
+  line-height: 1;
+  color: currentColor;
+  flex-shrink: 0;
+}
+ng-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Backdrop dims the topology canvas while the panel is open; clicking
+ * it closes the panel (mirroring the modal-close pattern in the rest
+ * of the app). z-index sits above the app navbar (z=100) and brand
+ * dropdown (z=200) so neither covers the panel — the panel is a
+ * full-page modal-like overlay while open. */
+.hist-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 300;
+}
+
+.hist-panel {
+  position: fixed;
+  /* Explicit inset shorthand instead of top/right/bottom so a parent
+   * stylesheet that resets `left` can't accidentally stretch the panel
+   * full-width. `auto` left = pin to right; the width below caps it. */
+  inset: 0 0 0 auto;
+  width: min(960px, 90vw);
+  background: var(--bg-0);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.25);
+  z-index: 301;
+  display: flex; flex-direction: column;
+  animation: hist-slide-in 0.18s ease-out;
+}
+@keyframes hist-slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+.hist-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-1);
+}
+.hist-head h3 { margin: 0; font-size: 15px; color: var(--text); }
+.hist-config-name {
+  font-size: 12px; color: var(--text-muted);
+  flex: 1;
+  /* `min-width: 0` lets the flex child shrink below its content size
+   * so a long config name doesn't push the close button off the right
+   * edge of the panel. `overflow: hidden` + ellipsis on the code keeps
+   * the visible text tidy when the name has to truncate. */
+  min-width: 0;
+  overflow: hidden;
+}
+.hist-config-name code {
+  font-family: monospace;
+  background: var(--bg-2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.hist-close {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 28px; height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 18px; line-height: 1;
+}
+.hist-close:hover { color: var(--text); background: var(--bg-2); }
+
+/* Header-level "clear ALL history" button. Distinct danger styling so
+ * it doesn't blend into the close X — the operation is destructive
+ * across every loaded config, not just this one. `inline-flex` +
+ * `align-items: center` makes sure the bin icon (rendered as a flex
+ * child) is vertically centred against the text instead of relying on
+ * vertical-align math; the latter clipped the icon's top against the
+ * tight padding-y. Small gap keeps the icon + label from butting
+ * directly together. */
+.hist-clear-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+.hist-clear-all:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(248, 81, 73, 0.08);
+}
+.hist-clear-all:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Per-entry × delete. Lives next to the SHA pill so it reads as
+ * "delete this row". Hover-revealed to keep the timeline visually
+ * quiet at rest. */
+.hist-entry-del {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  width: 20px;
+  height: 18px;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-left: 2px;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Per-entry bin glyph: smaller than the global ng-icon default so it
+ * sits naturally against the SHA pill without dominating the row.
+ *
+ * `--ng-icon__stroke-width: 2.4` thickens the heroicons-outline path
+ * strokes so the bin's lid line + inner slats stay visible at this
+ * small size — Heroicons ship with stroke-width 1.5 against a 24px
+ * viewBox, which at 12px display compresses to 0.75px effective and
+ * mostly disappears into browser antialiasing. The icon was reading
+ * as "only the bottom half visible" before this bump. */
+.hist-entry-del ng-icon,
+.hist-clear-all ng-icon {
+  font-size: 12px;
+  --ng-icon__stroke-width: 2.4;
+}
+.hist-entry:hover .hist-entry-del { opacity: 1; }
+.hist-entry-del:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(248, 81, 73, 0.08);
+}
+.hist-entry-del:disabled {
+  /* Stays invisible even on hover when the entry is the root commit
+   * (parent_sha is null). The title attribute explains why. */
+  opacity: 0;
+  cursor: not-allowed;
+}
+
+.hist-body {
+  flex: 1; min-height: 0;
+  display: grid;
+  /* `minmax(0, …)` on BOTH columns is the trick that stops the grid
+   * from expanding past the panel width when the preview <pre> has
+   * very long JSON lines. Without it, the `1fr` track inherits a
+   * min-content size from the pre's longest line, which pushes the
+   * Restore button (in the preview header, justify-content:
+   * space-between) off the right edge of the panel. */
+  grid-template-columns: minmax(280px, 36%) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+/* Timeline */
+.hist-timeline {
+  list-style: none; margin: 0; padding: 8px 0;
+  overflow-y: auto;
+  /* Same reason as `.hist-preview`: prevent the entry text from
+   * forcing this grid track to expand. The entries already truncate
+   * via the `.hist-msg` ellipsis. */
+  min-width: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-1);
+}
+.hist-entry {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.hist-entry:hover { background: var(--bg-2); }
+.hist-entry.selected {
+  background: rgba(88, 166, 255, 0.10);
+  border-left: 3px solid var(--accent);
+  padding-left: 11px;
+}
+.hist-entry-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.hist-ts {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: monospace;
+}
+.hist-sha {
+  font-family: monospace; font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.hist-msg {
+  color: var(--text);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hist-runs-pill {
+  align-self: flex-start;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.hist-runs-pill:hover { color: var(--text); }
+.hist-runs-pill.expanded {
+  background: rgba(88, 166, 255, 0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.hist-runs-chevron { font-size: 9px; opacity: 0.7; }
+.hist-runs-list {
+  list-style: none;
+  margin: 4px 0 0 0;
+  padding: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.hist-run-link {
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  border-radius: 3px;
+}
+.hist-run-link:hover { background: var(--bg-2); }
+.hist-run-link code {
+  font-family: monospace;
+}
+.hist-run-iids {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.hist-empty {
+  padding: 20px 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  list-style: none;
+}
+.hist-error { color: var(--danger); }
+
+/* Preview */
+.hist-preview {
+  display: flex; flex-direction: column;
+  min-height: 0;
+  /* `min-width: 0` so the JSON <pre> inside doesn't force this grid
+   * cell to grow past its track size. The <pre> handles long lines
+   * via its own `overflow: auto`. */
+  min-width: 0;
+  background: var(--bg-0);
+}
+.hist-preview-empty {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.hist-preview-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-1);
+  flex-shrink: 0;
+}
+.hist-preview-head-left {
+  display: flex; align-items: center; gap: 12px;
+  min-width: 0;
+}
+.hist-preview-head code {
+  font-family: monospace;
+  background: var(--bg-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text);
+}
+/* Segmented toggle between the graph and diff views. Two buttons share
+ * a border so they read as one control; the active button gets the
+ * accent border + tinted bg, mirroring the inference-page chip toggle. */
+.hist-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.hist-view-toggle button {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.hist-view-toggle button:last-child { border-right: none; }
+.hist-view-toggle button:hover { color: var(--text); background: var(--bg-2); }
+.hist-view-toggle button.active {
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--accent);
+}
+
+.hist-restore-btn {
+  background: var(--bg-2);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.hist-restore-btn:hover {
+  background: rgba(88, 166, 255, 0.12);
+}
+
+/* Graph preview: cytoscape mount. Fills the remaining preview-pane
+ * height; a subtle background distinguishes it from the surrounding
+ * chrome. The minimum-height guard keeps the mount visible even when
+ * the panel is short. */
+.hist-preview-graph {
+  flex: 1;
+  min-height: 220px;
+  background: var(--bg-0);
+  overflow: hidden;
+}
+
+/* Diff preview: a vertical stack of color-coded lines. Each line
+ * gets a green/red/transparent left strip via the type class so the
+ * +/- markers read at a glance, GitHub-style. */
+.hist-preview-diff {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--bg-0);
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
+.hist-preview-diff .diff-line {
+  display: block;
+  padding: 0 12px 0 6px;
+  white-space: pre;
+  /* No wrapping — long lines scroll horizontally inside the <pre>'s
+   * `overflow: auto`. Mirrors the canonical git-diff terminal view. */
+}
+.hist-preview-diff .diff-add {
+  background: rgba(46, 160, 67, 0.16);
+  color: var(--text);
+  border-left: 3px solid #2ea043;
+}
+.hist-preview-diff .diff-rm {
+  background: rgba(248, 81, 73, 0.16);
+  color: var(--text);
+  border-left: 3px solid #f85149;
+}
+.hist-preview-diff .diff-context {
+  color: var(--text-muted);
+  border-left: 3px solid transparent;
+}

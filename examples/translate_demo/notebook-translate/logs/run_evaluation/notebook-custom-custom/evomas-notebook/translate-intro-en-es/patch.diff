@@ -1,0 +1,34 @@
+diff --git a/intro.md b/intro.md
+index 516e82c..4857c7d 100644
+--- a/intro.md
++++ b/intro.md
+@@ -1,18 +1,18 @@
+-# Welcome to EvoMas
++# Bienvenido a EvoMas
+ 
+-EvoMas is an evolutionary multi-agent framework for program repair. It composes a small graph of specialised LLM agents (locator, patcher, reviewer, finalizer) that pass a problem statement through a chain of refinements until the workspace contains a patch that fixes the bug.
++EvoMas es un marco multiagente evolutivo para reparación de programas. Componen un pequeño grafo de agentes LLM especializados (locator, patcher, reviewer, finalizer) que pasan una declaración de problema a través de una cadena de refinamientos hasta que el espacio de trabajo contiene un parche que arregla el error.
+ 
+-## Why a graph
++## ¿Por qué un grafo?
+ 
+-A single monolithic prompt asking one model to "find the bug and fix it" leaves no room for the model to specialise. Each agent in the graph has a tighter remit:
++Un solo prompt monolítico que pide a un modelo "encontrar el error y arreglarlo" no deja espacio para que el modelo se especialice. Cada agente en el grafo tiene un mandato más estrecho:
+ 
+-- The locator narrows down the candidate files.
+-- The patcher proposes a unified diff.
+-- The reviewer inspects the diff for obvious mistakes.
+-- The finalizer emits the diff that the harness will evaluate.
++- El locator reduce el conjunto de archivos candidatos.
++- El patcher propone un unified diff.
++- El reviewer inspecciona el diff por errores obvios.
++- El finalizer emite el diff que el harness evaluará.
+ 
+-Smaller scopes mean smaller prompts, fewer hallucinations, and better calibration of the model's strengths.
++Ámbitos más pequeños significan prompts más pequeños, menos alucinaciones y una mejor calibración de las fortalezas del modelo.
+ 
+-## Running
++## Ejecución
+ 
+-Install the project, set up a virtual environment, and launch the EvoMas API server. Then point a notebook or the integration test at a SWE-bench instance — the framework handles the rest.
++Instale el proyecto, configure un entorno virtual y inicie el servidor de la API de EvoMas. Luego, dirija un cuaderno o la prueba de integración hacia una instancia de SWE-bench — el marco se encarga del resto.

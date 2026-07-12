@@ -1,0 +1,106 @@
+<div class="results-layout">
+
+  <app-instance-tree-picker
+      [instances]="instances"
+      [filteredInstances]="filteredInstances"
+      [jobGroups]="jobGroups"
+      [loading]="loading"
+      [selectedId]="selectedId"
+      [selectedRunId]="selectedRunId"
+      [filter]="filter"
+      [groupByInstance]="groupByInstance"
+      [openJobs]="openJobs"
+      (filterChange)="filter = $event"
+      (groupByInstanceChange)="groupByInstance = $event"
+      (refresh)="refresh()"
+      (selectInstance)="selectInstance($event)"
+      (selectInstanceInJob)="selectInstanceInJob($event)"
+      (toggleJob)="toggleJob($event)" />
+
+  <div class="center-col">
+    @if (!selectedId) {
+      <div class="center-hint">
+        <div>Select an instance to view its prediction and evaluation</div>
+      </div>
+    } @else {
+      <evo-box [title]="selectedId!" class="header-box">
+        <div class="run-pickers">
+          <div class="picker-block" style="flex: 1;">
+            <label class="field-label">Run</label>
+            @if (current!.runs.length === 0) {
+              <div class="empty-hint sm">— no runs —</div>
+            } @else {
+              <div class="run-row">
+                <evo-select [options]="runOptions"
+                            [ngModel]="selectedRunId"
+                            (ngModelChange)="selectRun($event)" />
+                <evo-button size="sm"
+                            [disabled]="!predictionConfigJson"
+                            title="Download the unified-config JSON used to produce this run"
+                            (clicked)="downloadPredictionConfig()"><ng-icon name="download" /> Config</evo-button>
+                <evo-button size="sm"
+                            [disabled]="!selectedPredFile"
+                            title="Download a Jupyter notebook that reproduces this run end-to-end (inference + evaluation), with the exact config + instance ids inlined."
+                            (clicked)="downloadNotebook()"><ng-icon name="download" /> Notebook</evo-button>
+              </div>
+            }
+          </div>
+        </div>
+      </evo-box>
+
+      <div class="inner-grid">
+        <app-prediction-panel
+            [prediction]="prediction"
+            [selectedPredFile]="selectedPredFile"
+            [predictionLog]="predictionLog"
+            [predictionLogMissing]="predictionLogMissing"
+            [predictionLogPath]="predictionLogPath"
+            [predictionConfigJson]="predictionConfigJson"
+            [predictionTimestamp]="predictionTimestamp"
+            [predictionEndTimestamp]="predictionEndTimestamp"
+            [predictionDuration]="predictionDuration"
+            [predictionConfigUsed]="predictionConfigUsed"
+            [showPredictionLog]="showPredictionLog"
+            [diffLines]="diffLines()"
+            (downloadPrediction)="downloadPrediction()"
+            (reveal)="reveal($event)"
+            (downloadPredictionLog)="downloadPredictionLogFile()"
+            (openLogViewer)="openLogViewer()"
+            (togglePredictionLog)="togglePredictionLog($event)" />
+
+        <app-evaluation-panel
+            [selectedEvalDir]="selectedEvalDir"
+            [evaluation]="evaluation"
+            [selectedPredFile]="selectedPredFile"
+            [resolvedFlag]="resolvedFlag()"
+            [testStatus]="testStatus()"
+            [showLogs]="showLogs"
+            [activeLog]="activeLog"
+            [isCustomInstance]="isCustomInstance"
+            [loadingLog]="loadingLog"
+            [logContent]="logContent"
+            [coloredLog]="coloredLog()"
+            (downloadZip)="downloadZip()"
+            (reveal)="reveal($event)"
+            (goEvaluate)="goEvaluate()"
+            (toggleLogs)="toggleLogs($event)"
+            (setActiveLog)="setActiveLog($event)"
+            (downloadLog)="downloadLog()" />
+      </div>
+    }
+
+    @if (error) {
+      <div class="error-banner">{{ error }}</div>
+    }
+  </div>
+</div>
+
+<app-log-viewer-modal
+    [open]="logViewOpen"
+    [loading]="logViewLoading"
+    [error]="logViewError"
+    [title]="logViewTitle"
+    [logFileName]="logViewFileName"
+    [predictionsLogsDir]="predictionsLogsDir"
+    [instance]="logViewInstance"
+    (close)="closeLogViewer()" />

@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evomas"
+version = "0.1.0"
+description = "Evolutionary multi-agent framework for SWE-bench-style program repair."
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+    "langchain",
+    "langgraph",
+    "langchain-ollama",
+    "langchain-google-genai",
+    "langchain-openai",
+    "pydantic",
+    "pyyaml",
+    "rich",
+    "datasets",
+    "wandb",
+    "weave",
+    "python-dotenv",
+    "flake8",
+    "unidiff",
+    "fastapi",
+    "uvicorn[standard]",
+    "typer",
+    "gitpython",
+    "ipykernel<7",
+    "sb-cli",
+    "swebench; sys_platform != 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+# `pip install -e .` registers an `evomas` command in the venv's Scripts/
+# that resolves to `evomas.cli:main`. The Typer app wraps every script /
+# server entry point listed in TODO.md's `## CLI` section.
+evomas = "evomas.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["evomas*"]
+exclude = ["app*", "api*", "results*", "SWE-bench*"]
+
+# Pytest config lives in `pytest.ini` at the repo root — pytest reads
+# that one first and ignores this block if it's present here too. Keep
+# this comment as a breadcrumb so future me doesn't add competing
+# settings in two places.

@@ -1,0 +1,237 @@
+:host {
+  display: flex;
+  /* `min-width` (not `width`) so the panel is at least 340px BUT can
+   * grow if a child needs more horizontal space — e.g. a long
+   * prediction filename. The central LOGS column is `flex: 1` and
+   * yields the room. No overflow:hidden — the user prefers shrinking
+   * the central panel over clipping the left. */
+  min-width: 340px;
+  flex-grow: 0;
+  flex-shrink: 0;
+  min-height: 0;
+  /* Smooth animation when toggling the rail open/closed. */
+  transition: min-width 0.18s ease, width 0.18s ease;
+}
+/* Collapsed state: narrow rail with just the toggle chevron. Override
+ * the default min-width so the rail can actually shrink to 36px; the
+ * body is removed from DOM via @if so width 36px just trims the chrome. */
+:host(.collapsed) {
+  min-width: 0;
+  width: 36px;
+}
+:host(.collapsed) ::ng-deep .evo-box-title { display: none; }
+:host(.collapsed) ::ng-deep .evo-box-header {
+  padding: 6px 4px;
+  justify-content: center;
+}
+
+/* Rail-style chevron button — sits in [box-actions] so it shares the
+ * box header with the title; survives collapse because the header
+ * stays mounted. */
+.rail-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 1px 6px;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.rail-toggle:hover { color: var(--text); background: var(--bg-2); border-color: var(--border); }
+
+.config-panel { flex: 1; min-height: 0; }
+.config-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.field-block .hint-text {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 6px 8px;
+  background: var(--bg-0);
+  border: 1px dashed var(--border);
+  border-radius: 5px;
+}
+/* Constrain hint width so long sentences wrap instead of forcing the
+   :host flex panel to grow past its 340px min-width. */
+.hint-text {
+  max-width: 320px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+.hint-text.err { color: var(--danger); border-color: rgba(248,81,73,.3); background: rgba(248,81,73,.08); }
+
+.inspection-card {
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--text);
+  /* Flex children default to min-width:auto (intrinsic content width);
+   * override so a long run_id_base inside .meta-val collapses to its
+   * ellipsis instead of demanding its full character width. */
+  min-width: 0;
+}
+.inspection-meta {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 2px 0;
+  /* Same min-width:0 pattern — one level down. The flex row holding
+   * key + val must shrink for the truncation rule on .meta-val to
+   * actually have any space to clip into. */
+  min-width: 0;
+}
+.inspection-meta .meta-key { color: var(--text-muted); }
+.inspection-meta .meta-val.mono { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 10.5px; }
+
+.inspection-groups { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.insp-group {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 8px;
+}
+.insp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.insp-tag {
+  background: rgba(88,166,255,.12);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  padding: 0 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+}
+.insp-count {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0 5px; font-size: 10px; color: var(--text-muted);
+}
+.insp-ids {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 1px;
+  max-height: 120px; overflow: auto;
+}
+.insp-ids li {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10.5px;
+  color: var(--text);
+  padding-left: 4px;
+}
+
+/* Predictions row: dropbox stretches, refresh button sits on the right. */
+.pred-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pred-row .pred-select { flex: 1; min-width: 0; }
+.pred-row evo-button { flex-shrink: 0; }
+
+/* Max workers spinbox: stretch to match the other field widths */
+.field-block evo-spinbox { display: block; }
+.field-block evo-spinbox ::ng-deep .evo-spinbox-wrap { width: 100%; }
+.field-block evo-spinbox ::ng-deep .evo-spinbox {
+  display: flex;
+  width: 100%;
+}
+.field-block evo-spinbox ::ng-deep .evo-spin-input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.field-block evo-spinbox ::ng-deep .evo-spin-btn {
+  padding: 0 14px;
+}
+
+/* Run row */
+.run-row {
+  display: flex;
+  gap: 6px;
+}
+.run-row evo-button:first-child { flex: 1; }
+.run-row evo-button:first-child ::ng-deep .evo-btn { width: 100%; justify-content: center; }
+
+/* Progress */
+.progress-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.progress-bar-wrap {
+  height: 6px;
+  background: var(--bg-0);
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #a371f7);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.progress-text { font-size: 11px; color: var(--text-muted); text-align: right; }
+
+/* Stats */
+.stats-block {
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-label { color: var(--text-muted); }
+.stat-val { font-weight: 700; color: var(--text); }
+.stat-row.resolved .stat-val { color: var(--success); }
+.stat-row.failed   .stat-val { color: var(--danger); }
+.stat-row.rate     .stat-val.pct { font-size: 16px; color: var(--accent); }
+
+/* Return code */
+.return-code {
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+.return-code.ok  { background: rgba(86,211,100,.1); color: var(--success); border: 1px solid rgba(86,211,100,.3); }
+.return-code.err { background: rgba(248,81,73,.1);  color: var(--danger);  border: 1px solid rgba(248,81,73,.3); }
+
+.eval-error {
+  padding: 8px 12px;
+  background: rgba(248,81,73,.1);
+  color: var(--danger);
+  border: 1px solid rgba(248,81,73,.3);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.empty-hint {
+  padding: 20px; text-align: center;
+  color: var(--text-muted); font-size: 12px;
+}

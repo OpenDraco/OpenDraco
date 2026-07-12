@@ -1,0 +1,429 @@
+/* The host flows inside the parent's topology grid alongside the canvas. */
+:host { display: contents; }
+
+/* ─── Right box ──────────────────────────────────────────── */
+.right-box {
+  width: 380px;
+  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  transition: width 0.18s ease;
+}
+/* Auto-collapse the Agent Config panel to a narrow rail whenever no
+ * agent node is selected — there's nothing meaningful to show, so
+ * reclaim the horizontal space for the graph canvas. The rail keeps
+ * a 36px stub visible so the user notices when an editable panel
+ * (re-)appears on selection. */
+.right-box.collapsed { width: 36px; }
+.right-box.collapsed ::ng-deep .evo-box-title {
+  /* Rotate the "Agent Config" title 90° so it reads vertically inside
+   * the narrow rail — confirms what the strip is without expanding. */
+  display: block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  margin: 8px auto 0;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+.right-box.collapsed ::ng-deep .evo-box-header {
+  padding: 0;
+  border-bottom: none;
+}
+.right-box.collapsed ::ng-deep .evo-box-body { display: none; }
+
+/* Make the panel body a flex column: the section list scrolls in
+ * `.inspector-scroll` (flex:1) and the Agent-info footer sits below it
+ * as a fixed-height row — so expanded content scrolls ABOVE the footer
+ * rather than disappearing behind it. */
+.right-box ::ng-deep .evo-box-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.inspector-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Reserve a stable gutter + a little breathing room so the scrollbar
+   * sits beside the controls (sliders/spinboxes) instead of overlapping
+   * their right edge. */
+  scrollbar-gutter: stable;
+  padding-right: 6px;
+}
+
+.agent-badge {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0d1117;
+}
+
+/* ─── Config fields ──────────────────────────────────────── */
+.config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+
+.cfg-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Column layout: label above, full-width control below */
+.cfg-full {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cfg-full evo-select { display: block; }
+.cfg-full evo-select ::ng-deep .evo-select-wrap { width: 100%; }
+.cfg-full evo-select ::ng-deep .evo-select-box { display: flex; }
+
+/* "Current model" badge above the search input. Always visible so the
+ * user can see the active selection even when the dropdown is filtered
+ * or the active model isn't a catalog entry (custom). The right-side
+ * chip is color-coded by `currentModelStatus`. */
+.current-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+}
+.current-model-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.current-model-value {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+}
+.current-model-chip {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+.current-model.st-pulled  .current-model-chip {
+  background: rgba(86, 211, 100, 0.12);
+  color: var(--success, #56d364);
+}
+.current-model.st-unpulled .current-model-chip {
+  background: rgba(227, 179, 65, 0.12);
+  color: var(--warning, #e3b341);
+}
+.current-model.st-custom   .current-model-chip {
+  background: rgba(139, 148, 158, 0.12);
+  color: var(--text-muted);
+}
+
+/* Substring filter above the model dropdown. Mirrors the existing
+ * inspector input styling (`.cfg-input` shape) but kept narrower
+ * vertically so it doesn't dominate the row. */
+.model-filter {
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: var(--bg-0);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.model-filter:focus { border-color: var(--accent); }
+.model-filter:disabled { opacity: 0.5; cursor: not-allowed; }
+.model-filter::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  height: 12px;
+  width: 12px;
+  background: var(--text-muted);
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M3 3 L9 9 M9 3 L3 9' stroke='black' stroke-width='1.5'/></svg>") center / contain no-repeat;
+  cursor: pointer;
+}
+
+/* Row layout: label left, control right */
+.cfg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cfg-row .cfg-label { flex-shrink: 0; }
+
+/* ─── Section header (title + ? icon) ────────────────────── */
+.cfg-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+.cfg-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Section-toggle button wraps the caret + title and takes the click,
+ * leaving the trailing help-popover icon as a sibling so its own
+ * click isn't swallowed by the toggle. */
+.section-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  flex: 1; min-width: 0;
+  background: transparent; border: none; padding: 2px 0;
+  color: inherit; cursor: pointer; text-align: left;
+  font: inherit;
+}
+.section-toggle:hover .cfg-section-title { color: var(--text); }
+.section-caret {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+  width: 10px;
+}
+.section-caret.open { transform: rotate(90deg); }
+
+/* Per-section "Reset to defaults" pill. Sits between the section
+ * toggle and the help-popover icon — small, muted by default so it
+ * doesn't compete with the section title, brightens on hover. */
+.section-reset {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.section-reset:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-0);
+}
+.section-reset:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Tools editor ───────────────────────────────────────── */
+.tools-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.empty-hint.sm { padding: 4px 0; font-size: 11px; }
+
+.tool-card {
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  margin-bottom: 6px;
+}
+.tool-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tool-name {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.tool-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 4px;
+}
+.tool-remove:hover { color: var(--danger); }
+
+.tool-desc {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin: 2px 0 6px;
+  line-height: 1.4;
+}
+
+.tool-params-label { display: block; margin-bottom: 3px; }
+/* Single-line input (was a multi-line textarea). Inline JSON keeps the
+ * tool card compact; the textarea took up 4× the height for a value
+ * that's almost always 1 line in practice. */
+.tool-params {
+  width: 100%;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+  background: var(--bg-1);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 6px;
+  box-sizing: border-box;
+  outline: none;
+}
+.tool-params:focus { border-color: var(--accent); }
+
+.tool-error {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--danger);
+}
+
+.add-tool-row { margin-top: 6px; }
+/* Top-of-section Add-a-tool dropdown — sits BEFORE the tool cards so
+ * users see the picker without scrolling. */
+.add-tool-row-top { margin: 0 0 8px; }
+
+/* ─── Prompts editor ─────────────────────────────────────── */
+.prompts-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.prompt-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.prompt-tab {
+  flex: 1;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 6px;
+  font-size: 11px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.prompt-tab:hover { color: var(--text); }
+.prompt-tab.active {
+  background: rgba(88,166,255,.12);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.prompt-tab.has-content::after {
+  content: '•';
+  margin-left: 4px;
+  color: var(--success);
+}
+
+.prompt-editor {
+  width: 100%;
+  min-height: 200px;
+  resize: vertical;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--bg-0);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px;
+  box-sizing: border-box;
+  tab-size: 2;
+}
+
+.prompt-hint {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ─── General-info box (fixed footer below the scroll region) ─── */
+/* Non-scrolling footer: `.inspector-scroll` (flex:1) takes the slack so
+ * this sits at the panel bottom whether sections are collapsed or
+ * expanded. Capped with an internal scroll so it can never dominate. */
+.agent-info-box {
+  flex-shrink: 0;
+  margin-top: 10px;
+  max-height: 45%;
+  overflow-y: auto;
+  padding: 10px 12px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.agent-info-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.agent-info-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 12px;
+  row-gap: 5px;
+  font-size: 11.5px;
+}
+.agent-info-grid dt {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+.agent-info-grid dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agent-info-grid dd.mono {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10.5px;
+  color: var(--accent);
+}
+
+/* ─── Misc ───────────────────────────────────────────────── */
+.empty-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
+}
+.center-hint {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  line-height: 1.6;
+}

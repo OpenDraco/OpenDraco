@@ -1,0 +1,223 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-0: #0d1117;
+  --bg-1: #161b22;
+  --bg-2: #21262d;
+  --bg-3: #2d333b;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #58a6ff;
+  --accent-h: #79b8ff;
+  --success: #56d364;
+  --warn: #e3b341;
+  --danger: #f85149;
+  --purple: #a371f7;
+
+  --c-manager: #e3b341;
+  --c-localize: #388bfd;
+  --c-patch: #56d364;
+  --c-validate: #f78166;
+  --c-ensembler: #a371f7;
+}
+
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-0);
+  color: var(--text);
+  font-size: 13px;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-1); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Buttons ─────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  user-select: none;
+}
+.btn:hover:not(:disabled) { background: var(--bg-3); border-color: var(--text-muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #0d1117; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-h); }
+.btn.success { background: var(--success); border-color: var(--success); color: #0d1117; font-weight: 600; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.warn { background: var(--warn); border-color: var(--warn); color: #0d1117; }
+.btn.ghost { background: transparent; }
+.btn.active { background: var(--bg-3); border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.icon { padding: 5px 7px; }
+
+/* ─── Inputs ──────────────────────────────────────── */
+input, textarea, select {
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+input[type=range] { padding: 0; background: transparent; cursor: pointer; }
+label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 3px; }
+
+/* ─── Shared layouts ──────────────────────────────── */
+.panel {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.panel-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.panel-body { padding: 12px; overflow-y: auto; }
+
+/* ─── Code / Diff ─────────────────────────────────── */
+pre, code {
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+}
+pre {
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text);
+}
+.diff-add { color: var(--success); }
+.diff-rm  { color: var(--danger); }
+.diff-hdr { color: var(--text-muted); }
+
+/* ─── Badge ───────────────────────────────────────── */
+.badge {
+  display: inline-block; padding: 2px 7px;
+  border-radius: 10px; font-size: 10px; font-weight: 700;
+}
+.badge.run  { background: #1f6feb33; color: var(--accent); border: 1px solid #1f6feb; }
+.badge.ok   { background: #23863633; color: var(--success); border: 1px solid #238636; }
+.badge.err  { background: #da363333; color: var(--danger);  border: 1px solid #da3633; }
+.badge.warn { background: #9e6a0333; color: var(--warn);    border: 1px solid #9e6a03; }
+
+/* --- Modal chrome ----------------------------------------------------------
+ * Global because Angular's default Emulated view encapsulation would
+ * otherwise scope these selectors to whichever component CSS defined them
+ * -- and modals get rendered from multiple route components (the Save-config
+ * dialog in <app-root>, the custom-repo dialog in <app-inference>, etc.). */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+.modal-card {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 360px;
+  max-width: 90vw;
+  box-shadow: 0 12px 32px rgba(0,0,0,.4);
+  overflow: hidden;
+}
+.modal-title {
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+}
+.modal-body { padding: 14px 16px; }
+.modal-label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.modal-input {
+  width: 100%;
+  background: var(--bg-0);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 7px 9px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.modal-hint { margin-top: 6px; font-size: 11px; color: var(--text-muted); }
+.modal-error { margin-top: 8px; font-size: 11px; color: var(--danger); }
+.modal-actions {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.modal-btn {
+  padding: 6px 14px;
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.modal-btn:hover { background: var(--bg-0); }
+.modal-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.modal-btn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
+.modal-btn.primary:hover { filter: brightness(1.1); }
+
+/* Wider variant for the Inference custom-repo modal -- the problem-statement
+ * textarea needs more room than the default 360 px card affords. */
+.modal-card.custom-modal-card { width: 520px; }
+.modal-input.custom-modal-textarea {
+  font-family: monospace;
+  resize: vertical;
+  min-height: 120px;
+}
+
+/* Full-screen variant for the Results page "View" modal — embeds the
+ * shared <app-inference-instance-view> at near-viewport size so a long
+ * run reads as comfortably as it does on the live Inference page. */
+.modal-card.modal-card-full {
+  width: min(1400px, 95vw);
+  height: 90vh;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-card.modal-card-full .modal-body {
+  flex: 1;
+  overflow: auto;
+}
+.modal-card.modal-card-full .log-view-body {
+  /* The shared component's :host is column flex; let it stretch inside the
+     scrollable body without forcing the card to overflow. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}

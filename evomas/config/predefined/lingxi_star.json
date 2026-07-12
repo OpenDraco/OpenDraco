@@ -1,0 +1,141 @@
+{
+  "id": "lingxi_star",
+  "description": "Lingxi centralized star: EvoMas Router hub iterates with problem_decoder_agent (Locator), solution_mapper_agent (Helper/Proxy), and problem_solver_agent (Patcher); reviewer_agent is the terminal sink. Workers are sourced from the Lingxi catalog; the hub uses EvoMas's built-in Router because Lingxi ships no native dispatcher.",
+  "entry": "hub",
+  "end": "reviewer",
+  "edges": [
+    {
+      "from": "hub",
+      "to": "decoder"
+    },
+    {
+      "from": "decoder",
+      "to": "hub"
+    },
+    {
+      "from": "hub",
+      "to": "mapper"
+    },
+    {
+      "from": "mapper",
+      "to": "hub"
+    },
+    {
+      "from": "hub",
+      "to": "solver"
+    },
+    {
+      "from": "solver",
+      "to": "hub"
+    },
+    {
+      "from": "hub",
+      "to": "reviewer"
+    }
+  ],
+  "agents": {
+    "hub": {
+      "class": "Router",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 2048,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 1024,
+      "stop": [],
+      "max_iters": 1,
+      "prompts": {
+        "system": "You dispatch the next worker in a Lingxi-flavoured SWE-bench pipeline. Critical path: decoder (problem_decoder_agent — Locator) -> solver (problem_solver_agent — Patcher) -> reviewer (reviewer_agent — terminal). `mapper` (solution_mapper_agent) is an optional helper and is never selected here. Answer with EXACTLY ONE word.",
+        "user": "Apply these rules IN ORDER. Stop at the first rule that matches.\n\n1. If `decoder` output is EMPTY -> answer: decoder\n2. If `solver` output is EMPTY -> answer: solver\n3. Otherwise -> answer: reviewer\n\n--- pipeline state (empty between `<<<` and `>>>` means that worker hasn't run yet) ---\ndecoder output:  <<<{decoder}>>>\nsolver output:   <<<{solver}>>>\nmapper output:   <<<{mapper}>>>\n--- end state ---\n\nAnswer with one word from: decoder, solver, reviewer."
+      }
+    },
+    "decoder": {
+      "class": "Locator",
+      "variant": "Lingxi:problem_decoder_agent",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 8192,
+      "stream": true,
+      "temperature": 0.2,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [
+        "</files>"
+      ],
+      "max_iters": 6
+    },
+    "mapper": {
+      "class": "Helper/Proxy",
+      "variant": "Lingxi:solution_mapper_agent",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 4096,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [],
+      "max_iters": 4
+    },
+    "solver": {
+      "class": "Patcher",
+      "variant": "Lingxi:problem_solver_agent",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 16384,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 2048,
+      "stop": [
+        "</patch>"
+      ],
+      "max_iters": 12,
+      "fallback": {
+        "enabled": true,
+        "guarantee_change": true
+      }
+    },
+    "reviewer": {
+      "class": "Reviewer",
+      "variant": "Lingxi:reviewer_agent",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 4096,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 1024,
+      "stop": [
+        "</review>"
+      ],
+      "max_iters": 6
+    }
+  }
+}

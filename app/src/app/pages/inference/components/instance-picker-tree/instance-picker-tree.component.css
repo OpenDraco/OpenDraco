@@ -1,0 +1,127 @@
+:host {
+  display: flex;
+  /* min-width (not width): picker starts at 300px but can grow to fit
+   * long instance ids; the inference center column (flex: 1) shrinks
+   * to make room rather than being overlapped. */
+  min-width: 300px;
+  flex-grow: 0;
+  flex-shrink: 0;
+  min-height: 0;
+  transition: min-width 0.18s ease, width 0.18s ease;
+}
+:host(.collapsed) { min-width: 0; width: 36px; }
+:host(.collapsed) ::ng-deep .evo-box-title { display: none; }
+:host(.collapsed) ::ng-deep .evo-box-header {
+  padding: 6px 4px;
+  justify-content: center;
+}
+
+.rail-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 1px 6px;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.rail-toggle:hover { color: var(--text); background: var(--bg-2); border-color: var(--border); }
+
+.left-box { flex: 1; min-height: 0; }
+.left-box ::ng-deep .evo-box-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.instance-search { margin-bottom: 6px; flex-shrink: 0; }
+
+.instance-list { display: flex; flex-direction: column; overflow-y: auto; flex: 1; margin: 0 -12px; }
+.instance-item {
+  padding: 7px 12px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 0.1s;
+  display: flex;
+  align-items: center;
+}
+.instance-item:hover { background: var(--bg-2); }
+.instance-item.selected { background: rgba(88,166,255,.1); border-left-color: var(--accent); }
+.instance-item input[type=checkbox] { margin-right: 8px; }
+.instance-item .inst-meta { flex: 1; min-width: 0; }
+.inst-id { font-size: 11px; font-weight: 600; font-family: monospace; color: var(--text); }
+.inst-repo { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+.count-chip {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1px 7px; font-size: 10px; color: var(--text-muted);
+}
+
+.select-actions {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.link-btn {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--accent); padding: 0; font-size: 11px;
+}
+.link-btn:hover { text-decoration: underline; }
+.dot-sep { opacity: .6; }
+.sel-count { margin-left: auto; color: var(--text); font-weight: 600; }
+.err-banner {
+  margin: 4px 0;
+  padding: 5px 8px;
+  background: rgba(248,81,73,.12);
+  border: 1px solid rgba(248,81,73,.3);
+  color: var(--danger);
+  font-size: 11px;
+  border-radius: 5px;
+}
+
+/* Nested subset/split expanders */
+.subset-group { border-bottom: 1px solid var(--border); }
+.subset-group:last-child { border-bottom: none; }
+.group-header {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%;
+  background: transparent; border: none; cursor: pointer;
+  padding: 6px 4px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+}
+.group-header:hover { background: var(--bg-2); }
+.subset-header { font-weight: 700; }
+.split-header  { padding-left: 18px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+.split-header:hover { color: var(--text); }
+.caret { width: 10px; display: inline-block; color: var(--text-muted); }
+.group-name { flex: 0 0 auto; }
+.group-count {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 9px; padding: 0 6px;
+  font-size: 10px; color: var(--text-muted);
+  font-weight: 500;
+}
+.grow { flex: 1; }
+.leaf-refresh {
+  background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 4px; padding: 1px 7px; font-size: 11px; cursor: pointer;
+  font-family: inherit;
+}
+.leaf-refresh:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.leaf-refresh:disabled { opacity: .4; cursor: wait; }
+.leaf-select {
+  background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 4px; padding: 1px 6px; font-size: 11px; cursor: pointer;
+  font-family: inherit;
+}
+.leaf-select:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.leaf-select:disabled { opacity: .35; cursor: not-allowed; }
+.leaf-select.checked { color: var(--accent); border-color: var(--accent); background: rgba(88,166,255,.08); }
+.split-group .instance-item { padding-left: 22px; }
+.empty-hint.sm { padding: 4px 0 4px 28px; font-size: 11px; }
+.empty-hint { padding: 12px 0; text-align: center; color: var(--text-muted); font-size: 12px; }

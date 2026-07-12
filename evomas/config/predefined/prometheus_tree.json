@@ -1,0 +1,165 @@
+{
+  "id": "prometheus_tree",
+  "description": "Prometheus hierarchical pure tree: classifier (Issue Classification Agent, Router) picks one of three independent branches based on issue type — bug (reproduction + Patcher), feature (analysis + Patcher), or QA (context retrieval + Patcher). Each branch terminates at its own Patcher leaf so every classifier decision still produces a workspace diff. Strict tree — every non-root node has exactly one parent and there are no back-edges. The `end` set lists all three leaves; LangGraph only finalizes the one the Router actually reached. Without the Router on the classifier the three branches would fan out in parallel every super-step; the Router restricts dispatch to the matched pipeline. Prometheus has no agent catalog yet, so every node uses the EvoMas built-in type defaults.",
+  "entry": "classifier",
+  "end": [
+    "issue_resolver",
+    "feature_patch",
+    "qa_patch"
+  ],
+  "edges": [
+    { "from": "classifier", "to": "bug_repro" },
+    { "from": "classifier", "to": "feature_analysis" },
+    { "from": "classifier", "to": "context_retrieval" },
+    { "from": "bug_repro", "to": "issue_resolver" },
+    { "from": "feature_analysis", "to": "feature_patch" },
+    { "from": "context_retrieval", "to": "qa_patch" }
+  ],
+  "agents": {
+    "classifier": {
+      "class": "Router",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 2048,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 1024,
+      "stop": [],
+      "max_iters": 1,
+      "prompts": {
+        "system": "You are the Issue Classification Agent at the root of a 3-pipeline Prometheus tree. Pick exactly one downstream branch based on the issue type. Answer with EXACTLY ONE word naming the branch entry node.",
+        "user": "Classify the issue and dispatch to the right pipeline. Apply these rules IN ORDER. Stop at the first rule that matches.\n\n1. If the issue describes an incorrect / buggy behaviour (a function returns the wrong value, raises an unexpected error, fails a test) -> answer: bug_repro\n2. Else if the issue requests a NEW feature, capability, or enhancement -> answer: feature_analysis\n3. Otherwise (the issue is a question about code, docs, or usage) -> answer: context_retrieval\n\n--- issue ---\n{issue}\n--- end issue ---\n\nAnswer with one word from: bug_repro, feature_analysis, context_retrieval."
+      }
+    },
+    "bug_repro": {
+      "class": "Bug reproduction",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 8192,
+      "stream": true,
+      "temperature": 0.2,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 1024,
+      "stop": [],
+      "max_iters": 6
+    },
+    "issue_resolver": {
+      "class": "Patcher",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 16384,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 2048,
+      "stop": [
+        "</patch>"
+      ],
+      "max_iters": 12,
+      "fallback": {
+        "enabled": true,
+        "guarantee_change": true
+      }
+    },
+    "feature_analysis": {
+      "class": "Locator",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 8192,
+      "stream": true,
+      "temperature": 0.2,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [
+        "</files>"
+      ],
+      "max_iters": 6
+    },
+    "feature_patch": {
+      "class": "Patcher",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 16384,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 2048,
+      "stop": [
+        "</patch>"
+      ],
+      "max_iters": 12,
+      "fallback": {
+        "enabled": true,
+        "guarantee_change": true
+      }
+    },
+    "context_retrieval": {
+      "class": "Locator",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 8192,
+      "stream": true,
+      "temperature": 0.2,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [
+        "</files>"
+      ],
+      "max_iters": 6
+    },
+    "qa_patch": {
+      "class": "Patcher",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 16384,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 2048,
+      "stop": [
+        "</patch>"
+      ],
+      "max_iters": 12,
+      "fallback": {
+        "enabled": true,
+        "guarantee_change": true
+      }
+    }
+  }
+}

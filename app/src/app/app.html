@@ -1,0 +1,128 @@
+<div class="shell">
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <button class="brand-trigger" (click)="toggleMenu()" [class.open]="menuOpen" type="button">
+        <apragon-icon class="logo" [size]="22" [glow]="false" ariaLabel="EvoMas" />
+        <span class="brand-name">EvoMas</span>
+        <span class="brand-chevron">▾</span>
+      </button>
+      @if (menuOpen) {
+        <div class="brand-menu">
+          <button class="brand-menu-item" (click)="openCreateFromTemplate()" type="button">
+            <span>+ Create from template…</span>
+          </button>
+          <button class="brand-menu-item" (click)="openSaveDialog()" type="button">
+            <span>Export config…</span>
+          </button>
+          <button class="brand-menu-item" (click)="openFilePicker()" type="button">
+            <span>Load config…</span>
+          </button>
+        </div>
+      }
+    </div>
+    <div class="nav-links">
+      <a routerLink="/topology"   routerLinkActive="active" class="nav-link">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/></svg>
+        Topology
+      </a>
+      <a routerLink="/inference"  routerLinkActive="active" class="nav-link">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Inference
+      </a>
+      <a routerLink="/evaluation" routerLinkActive="active" class="nav-link">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Evaluation
+      </a>
+      <a routerLink="/results"    routerLinkActive="active" class="nav-link">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Results
+      </a>
+    </div>
+    <div class="navbar-status"
+         [title]="(apiOnline ? 'API online — ' : 'API offline — ') + apiHost">
+      <span class="api-dot"
+            [class.online]="apiOnline === true"
+            [class.offline]="apiOnline === false"
+            [class.unknown]="apiOnline === null"></span>
+      <span class="api-label">API</span>
+    </div>
+  </nav>
+
+  <input #fileInput type="file" accept=".json,application/json" (change)="onFileChosen($event)" hidden />
+
+  @if (saveDialogOpen) {
+    <div class="modal-backdrop" (click)="cancelSave()">
+      <div class="modal-card" (click)="$event.stopPropagation()">
+        <div class="modal-title">Export configuration</div>
+        <div class="modal-body">
+          <!-- Which config to export. Defaults to the active one; the
+               user can pick any other entry from the catalog (predefined
+               or loaded) without leaving the dialog. -->
+          <label class="modal-label">Source config</label>
+          <evo-select class="modal-select"
+                      [optgroups]="exportSelectGroups"
+                      [(ngModel)]="saveSourceStem" />
+          <!-- Empty by default so the user types a name deliberately
+               (avoids exporting "chain.json" because the active config's
+               name was pre-filled and they didn't notice). -->
+          <label class="modal-label">File name</label>
+          <input type="text" class="modal-input" [(ngModel)]="saveName"
+                 placeholder="my-config" (keyup.enter)="confirmSave()" autofocus />
+          <div class="modal-hint">Will be downloaded as &lt;name&gt;.json</div>
+          @if (saveError) {
+            <div class="modal-error">{{ saveError }}</div>
+          }
+        </div>
+        <div class="modal-actions">
+          <button class="modal-btn" (click)="cancelSave()" type="button">Cancel</button>
+          <button class="modal-btn primary" (click)="confirmSave()" type="button"
+                  [disabled]="saveBusy">
+            {{ saveBusy ? 'Exporting…' : 'Export' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (templateDialogOpen) {
+    <div class="modal-backdrop" (click)="cancelCreateFromTemplate()">
+      <div class="modal-card" (click)="$event.stopPropagation()">
+        <div class="modal-title">Create from template</div>
+        <div class="modal-body">
+          <label class="modal-label">Template</label>
+          <!-- Grouped dropdown: shipped Predefined topologies first,
+               then user-saved Loaded configs underneath. The visual
+               group headers make the source obvious so the user
+               doesn't fork an in-progress draft thinking it's the
+               canonical template (or vice versa). -->
+          <evo-select class="modal-select"
+                      [optgroups]="templateSelectGroups"
+                      [(ngModel)]="templateChoice" />
+          <label class="modal-label">New config name</label>
+          <input type="text" class="modal-input" [(ngModel)]="templateNewName"
+                 placeholder="my-config" (keyup.enter)="confirmCreateFromTemplate()" autofocus />
+          <div class="modal-hint">Saved to evomas/config/loaded/&lt;name&gt;.json</div>
+          @if (templateError) {
+            <div class="modal-error">{{ templateError }}</div>
+          }
+        </div>
+        <div class="modal-actions">
+          <button class="modal-btn" (click)="cancelCreateFromTemplate()" type="button">Cancel</button>
+          <button class="modal-btn primary" (click)="confirmCreateFromTemplate()"
+                  type="button" [disabled]="templateBusy">
+            {{ templateBusy ? 'Creating…' : 'Create' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <main class="page-content">
+    <router-outlet />
+  </main>
+</div>
+
+<!-- App-wide modal host. One instance services every page / guard
+     that uses DialogService.{alert,confirm,prompt}. Lives at the
+     shell root so the backdrop overlays the navbar too. -->
+<app-dialog-host></app-dialog-host>

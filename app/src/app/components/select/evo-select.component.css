@@ -1,0 +1,225 @@
+:host { display: inline-flex; flex-direction: column; }
+
+.evo-select-wrap { display: flex; flex-direction: column; gap: 4px; }
+.evo-label { font-size: 11px; color: var(--text-muted); }
+
+.evo-select-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.evo-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 5px 28px 5px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.12s;
+  width: 100%;
+}
+.evo-select:focus { border-color: var(--accent); }
+.evo-select-box.disabled .evo-select { opacity: 0.4; cursor: not-allowed; }
+.evo-select-arrow {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+.evo-select-arrow.open { transform: translateY(-50%) rotate(180deg); }
+
+/* ─── Grouped panel (custom popover) ──────────────────────────────────
+ * Triggered when `[optgroups]` is provided AND non-empty. Replaces the
+ * native <select> for that case so we can render section headers with
+ * proper visual distinction (color-tagged, count chip, hover/active
+ * states) — native <optgroup> labels can't carry color/background in
+ * a consistent way across browsers. */
+
+.evo-select-box.grouped { position: relative; width: 100%; }
+
+.evo-select.grouped-trigger {
+  text-align: left;
+  font-family: inherit;
+  position: relative;
+}
+.evo-select.grouped-trigger.open {
+  border-color: var(--accent);
+  background: var(--bg-1);
+}
+.grouped-trigger-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.evo-select.grouped-trigger:has(.grouped-trigger-label:empty) {
+  color: var(--text-muted);
+}
+
+.grouped-panel {
+  /* position: fixed (viewport-relative) so the panel escapes the
+     inspector's `overflow:hidden` / `overflow-y:auto` ancestor chain
+     and can be wider than the trigger. top/left/width and max-height
+     are set inline by `positionPanel()` based on the trigger's
+     bounding rect — the 320 px below is a fallback cap; the inline
+     value shrinks below it when the chosen direction lacks room. */
+  position: fixed;
+  z-index: 50;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0 0 4px;
+  animation: groupedPanelIn 0.12s ease-out;
+}
+/* Mirror the slide-in when the panel opens upward — appears to rise
+   into place from just below the resting position, matching the
+   visual direction of the user's expectation. Box-shadow flipped
+   upward too so the panel still looks "lifted" from its trigger. */
+.grouped-panel.up {
+  animation: groupedPanelInUp 0.12s ease-out;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+}
+@keyframes groupedPanelIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes groupedPanelInUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.grouped-section + .grouped-section {
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 2px;
+}
+
+.grouped-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  position: sticky;
+  top: 0;
+  background: var(--bg-1);
+  z-index: 1;
+}
+.grouped-section-label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: middle;
+  background: var(--text-muted);
+}
+/* Color-tag the headers so each repo reads as its own bucket at a
+   glance. `evomas` gets the accent blue (core helpers); the rest get
+   a palette cycle — kept terse so adding a repo doesn't need a CSS
+   patch (any unmatched group falls through to the muted default). */
+.grouped-section-head[data-group="evomas"]                 .grouped-section-label { color: var(--accent); }
+.grouped-section-head[data-group="evomas"]                 .grouped-section-label::before { background: var(--accent); }
+.grouped-section-head[data-group="openhands"]              .grouped-section-label { color: #79c0ff; }
+.grouped-section-head[data-group="openhands"]              .grouped-section-label::before { background: #79c0ff; }
+.grouped-section-head[data-group="auto_code_rover"]        .grouped-section-label { color: #56d364; }
+.grouped-section-head[data-group="auto_code_rover"]        .grouped-section-label::before { background: #56d364; }
+.grouped-section-head[data-group="augment_swebench_agent"] .grouped-section-label { color: #f0883e; }
+.grouped-section-head[data-group="augment_swebench_agent"] .grouped-section-label::before { background: #f0883e; }
+.grouped-section-head[data-group="joycode_agent"]          .grouped-section-label { color: #db61a2; }
+.grouped-section-head[data-group="joycode_agent"]          .grouped-section-label::before { background: #db61a2; }
+.grouped-section-head[data-group="trae_agent"]             .grouped-section-label { color: #a371f7; }
+.grouped-section-head[data-group="trae_agent"]             .grouped-section-label::before { background: #a371f7; }
+.grouped-section-head[data-group="lingma_swe_gpt"]         .grouped-section-label { color: #e3b341; }
+.grouped-section-head[data-group="lingma_swe_gpt"]         .grouped-section-label::before { background: #e3b341; }
+.grouped-section-head[data-group="patchwork"]              .grouped-section-label { color: #f78166; }
+.grouped-section-head[data-group="patchwork"]              .grouped-section-label::before { background: #f78166; }
+.grouped-section-head[data-group="composio"]               .grouped-section-label { color: #39c5cf; }
+.grouped-section-head[data-group="composio"]               .grouped-section-label::before { background: #39c5cf; }
+.grouped-section-head[data-group="suna"]                   .grouped-section-label { color: #8b949e; }
+.grouped-section-head[data-group="suna"]                   .grouped-section-label::before { background: #8b949e; }
+.grouped-section-head[data-group="swe_agent"]              .grouped-section-label { color: #58a6ff; }
+.grouped-section-head[data-group="swe_agent"]              .grouped-section-label::before { background: #58a6ff; }
+.grouped-section-head[data-group="claude_coder"]           .grouped-section-label { color: #c9a4ff; }
+.grouped-section-head[data-group="claude_coder"]           .grouped-section-label::before { background: #c9a4ff; }
+.grouped-section-head[data-group="debug_gym"]              .grouped-section-label { color: #ff7b72; }
+.grouped-section-head[data-group="debug_gym"]              .grouped-section-label::before { background: #ff7b72; }
+
+.grouped-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.grouped-section-items {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px;
+}
+.grouped-item {
+  padding: 5px 12px 5px 24px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  border-left: 2px solid transparent;
+  transition: background 0.08s ease, border-color 0.08s ease;
+}
+.grouped-item:hover {
+  background: var(--bg-2);
+  border-left-color: var(--accent);
+}
+.grouped-item.active {
+  background: rgba(88, 166, 255, 0.12);
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Flat (ungrouped) items — typically a leading "(empty)" / "(none)"
+   sentinel passed via `[options]`. Rendered above all sections with
+   no group header. Shallower indent and a muted style so it reads as
+   a meta choice ("clear / no pick") rather than a real tool. */
+.grouped-flat-items {
+  margin: 0;
+  padding: 0 0 2px;
+  border-bottom: 1px solid var(--border);
+}
+.grouped-item.grouped-item-flat {
+  padding-left: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.grouped-item.grouped-item-flat:hover {
+  color: var(--text);
+  font-style: normal;
+}

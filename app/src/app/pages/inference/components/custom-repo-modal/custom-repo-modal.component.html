@@ -1,0 +1,49 @@
+@if (open) {
+  <div class="modal-backdrop" (click)="submitting || close.emit()">
+    <div class="modal-card custom-modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-title">Add custom GitHub repo</div>
+      <div class="modal-body">
+        <label class="modal-label">Repo</label>
+        <input class="modal-input" type="text"
+               placeholder="owner/name (or full https://github.com/...)"
+               [ngModel]="repo"
+               (ngModelChange)="onRepoChange($event)"
+               [disabled]="submitting" />
+
+        <label class="modal-label" style="margin-top:12px">Problem statement</label>
+        <textarea class="modal-input custom-modal-textarea" rows="6"
+                  placeholder="Describe the bug / task the agents should solve…"
+                  [ngModel]="problem"
+                  (ngModelChange)="onProblemChange($event)"
+                  [disabled]="submitting"></textarea>
+
+        <label class="modal-label" style="margin-top:12px">
+          base_commit <span style="font-weight:400; opacity:.7">-- optional, defaults to HEAD</span>
+        </label>
+        <input class="modal-input" type="text"
+               placeholder="(leave blank for HEAD)"
+               [ngModel]="baseCommit"
+               (ngModelChange)="onBaseCommitChange($event)"
+               [disabled]="submitting" />
+
+        <div class="modal-hint">
+          Custom repos are inference-only -- the SWE-bench harness can't score them
+          (no <code>test_patch</code> / <code>FAIL_TO_PASS</code> / <code>PASS_TO_PASS</code>).
+        </div>
+        @if (error) {
+          <div class="modal-error">{{ error }}</div>
+        }
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn" type="button"
+                [disabled]="submitting"
+                (click)="close.emit()">Cancel</button>
+        <button class="modal-btn primary" type="button"
+                [disabled]="!repo.trim() || !problem.trim() || submitting"
+                (click)="submit.emit()">
+          @if (submitting) { Adding... } @else { Add }
+        </button>
+      </div>
+    </div>
+  </div>
+}

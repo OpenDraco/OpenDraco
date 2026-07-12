@@ -1,0 +1,72 @@
+<evo-box title="Instances" [hasActions]="true" class="left-box" [noPad]="true">
+  <ng-container box-actions>
+    @if (!collapsed()) {
+      <evo-button size="sm" (clicked)="refresh.emit()" title="Refresh"><ng-icon name="refresh" /></evo-button>
+    }
+    <button type="button" class="rail-toggle"
+            (click)="toggleCollapsed()"
+            [title]="collapsed() ? 'Expand panel' : 'Collapse panel'"
+            [attr.aria-expanded]="!collapsed()">
+      {{ collapsed() ? '»' : '«' }}
+    </button>
+  </ng-container>
+  @if (!collapsed()) {
+  <div class="instance-search">
+    <input type="text"
+           class="instance-search-input"
+           placeholder="Filter by instance_id or run_id…"
+           [ngModel]="filter"
+           (ngModelChange)="filterChange.emit($event)" />
+  </div>
+  <label class="group-toggle-row">
+    <evo-switch [ngModel]="groupByInstance" (ngModelChange)="groupByInstanceChange.emit($event)" />
+    <span class="group-toggle-label">Group by instance</span>
+  </label>
+  <div class="instance-list" #instanceList>
+    @if (loading) {
+      <div class="empty-hint">Loading…</div>
+    } @else if (instances.length === 0) {
+      <div class="empty-hint">No results yet</div>
+    } @else if (filteredInstances.length === 0) {
+      <div class="empty-hint">No matches for "{{ filter }}"</div>
+    } @else if (groupByInstance) {
+      @for (inst of filteredInstances; track inst.instance_id) {
+        <div class="inst-item"
+             [class.active]="inst.instance_id === selectedId"
+             (click)="selectInstance.emit(inst.instance_id)"
+             [title]="inst.instance_id">
+          <div class="inst-name">{{ inst.instance_id }}</div>
+          <div class="inst-meta">
+            @if (inst.predictions.length) { <span class="badge p">{{ inst.predictions.length }} pred</span> }
+            @if (inst.evaluations.length) { <span class="badge e">{{ inst.evaluations.length }} eval</span> }
+          </div>
+        </div>
+      }
+    } @else {
+      @for (job of jobGroups; track job.runId) {
+        <div class="inst-group">
+          <button class="inst-group-head clickable" type="button" (click)="toggleJob.emit(job.runId)">
+            <ng-icon class="caret" [name]="isJobOpen(job.runId) ? 'chevronDown' : 'chevronRight'" />
+            <span class="inst-group-tag mono">{{ job.runId }}</span>
+            <span class="inst-group-count">{{ job.entries.length }}</span>
+          </button>
+          @if (isJobOpen(job.runId)) {
+            @for (entry of job.entries; track entry.instance.instance_id + '@' + entry.run.run_id) {
+              <div class="inst-item"
+                   [class.active]="entry.instance.instance_id === selectedId && entry.run.run_id === selectedRunId"
+                   (click)="selectInstanceInJob.emit(entry)"
+                   [title]="entry.instance.instance_id">
+                <div class="inst-name">{{ entry.instance.instance_id }}</div>
+                <div class="inst-meta">
+                  @if (entry.run.prediction) { <span class="badge p">pred</span> }
+                  @if (entry.run.evaluation) { <span class="badge e">eval</span> }
+                </div>
+              </div>
+            }
+          }
+        </div>
+      }
+    }
+  </div>
+  }
+</evo-box>

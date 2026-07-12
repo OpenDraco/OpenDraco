@@ -1,0 +1,228 @@
+<div class="topo-layout">
+
+  <!-- ─── Left Panel ────────────────────────────────────────── -->
+  <app-config-list-panel
+      [predefinedList]="predefinedList"
+      [loadedList]="loadedList"
+      [currentConfigName]="currentConfigName"
+      [collapsed]="leftCollapsed()"
+      [validity]="configValidity"
+      (load)="loadPredefined($event)"
+      (rename)="renameLoaded($event)"
+      (delete)="deleteLoaded($event.stem, $event.ev)"
+      (toggleCollapsed)="toggleLeftCollapsed()" />
+
+  <!-- ─── Center ────────────────────────────────────────────── -->
+  <div class="center-col">
+    <app-topology-toolbar
+        [currentConfig]="currentConfig"
+        [currentConfigName]="currentConfigName"
+        [isLoadedConfig]="isLoadedConfig"
+        [dirty]="dirty"
+        [validated]="validated"
+        [addEdgeMode]="addEdgeMode"
+        [edgeSource]="edgeSource"
+        [selectedAgent]="selectedAgent"
+        [selectedEdgeId]="selectedEdgeId"
+        [canUndo]="canUndo"
+        [canRedo]="canRedo"
+        [saveFlash]="saveFlash"
+        [validateFlash]="validateFlash"
+        [agentCount]="agentCount"
+        [edgeCount]="edgeCount"
+        [cycleCount]="cycleCount"
+        [topoStatsTooltip]="topoStatsTooltip"
+        [cramped]="!leftCollapsed() && !!selectedAgent"
+        [validationErrors]="validationErrors"
+        [validationWarnings]="validationWarnings"
+        (toggleAddEdge)="toggleAddEdgeMode()"
+        (deleteSelected)="deleteSelected()"
+        (renameSelected)="renameSelected()"
+        (undo)="undo()"
+        (redo)="redo()"
+        (relayout)="relayout()"
+        (reloadGraph)="reloadGraph()"
+        (validate)="validate()"
+        (saveToDisk)="saveToDisk()"
+        (openHistoryPanel)="openHistoryPanel()"
+        (dismissValidationErrors)="dismissValidationErrors()"
+        (dismissValidationWarnings)="dismissValidationWarnings()" />
+
+    <!-- Graph canvas. The cytoscape host stays in the DOM AND visible at
+         all times so it always has measurable dimensions; the error panel
+         is overlaid via absolute positioning when a load fails. Hiding
+         the host with [hidden] used to race with cytoscape's resize and
+         left the next successful load with elements positioned at 0×0. -->
+    <div class="graph-area">
+      <!-- `.graph-stack` shares the rounded border + overflow:hidden clip
+           between the background layer and the cytoscape mount. The
+           background sits OUTSIDE #graphEl on purpose — `cy.destroy()`
+           on Reload only touches the cytoscape container's children, so
+           keeping the starfield + grid as a sibling means they stay
+           rendered through every reload cycle. -->
+      <div class="graph-stack">
+        <!-- Z-order inside .graph-stack (back → front):
+               1. .graph-grid-svg  starfield tile + dots + crosses, ALL
+                  rendered in cytoscape's world space so they pan and
+                  zoom with the graph in lock-step.
+               2. .graph-wrap      cytoscape <canvas> (edges + nodes)
+             The previous DOM-based parallax starfield was retired in
+             favour of an SVG <pattern> so the bg tiles infinitely and
+             follows the same view math as the grid. -->
+        <svg class="graph-grid-svg" xmlns="http://www.w3.org/2000/svg"
+             preserveAspectRatio="none">
+          <defs>
+            <!-- Sky tile (2560×2560 source SVG, served from /app/public/).
+                 Pattern tile is 1024 world units so at zoom=1 one tile
+                 lands at ~1024 screen pixels — same density the prior
+                 starfield used. The <image> uses xMidYMid slice so the
+                 source fills the tile cleanly when scaled.
+                 The inner <animateTransform> drifts the pattern by
+                 exactly one tile per cycle (1024 world units in 90s on
+                 the X axis), so the loop boundary is invisible — the
+                 pattern at t=0 and t=90s is positionally identical. -->
+            <pattern id="bg-sky" width="1024" height="1024"
+                     patternUnits="userSpaceOnUse">
+              <image href="/sky-tile.svg"
+                     x="0" y="0" width="1024" height="1024"
+                     preserveAspectRatio="xMidYMid slice" />
+              <animateTransform attributeName="patternTransform"
+                                type="translate"
+                                from="0 0"
+                                to="1024 0"
+                                dur="90s"
+                                repeatCount="indefinite" />
+            </pattern>
+            <pattern id="grid-minor" width="20" height="20"
+                     patternUnits="userSpaceOnUse">
+              <circle cx="0" cy="0" r="0.7" fill="rgba(180, 178, 220, 0.12)" />
+            </pattern>
+            <pattern id="grid-major" width="80" height="80"
+                     patternUnits="userSpaceOnUse">
+              <path d="M -3 0 L 3 0 M 0 -3 L 0 3"
+                    stroke="rgba(180, 178, 220, 0.22)"
+                    stroke-width="0.9"
+                    stroke-linecap="round" />
+            </pattern>
+          </defs>
+          <g class="grid-world" [attr.transform]="gridTransform">
+            <!-- Sky ALWAYS renders — it's the canvas backdrop; only
+                 the dots + crosses honor showGrid(). Painted first so
+                 the grid overlays it. Drifts via the pattern's own
+                 animateTransform; tile-seamless loop.
+                 `opacity` dims the whole layer so the sky reads as a
+                 subdued backdrop instead of competing with the nodes
+                 and edges on top. Bump toward 1 for a more vivid sky,
+                 toward 0 for a near-invisible hint. -->
+            <rect class="bg-sky-rect"
+                  [attr.x]="visWorld.x" [attr.y]="visWorld.y"
+                  [attr.width]="visWorld.w" [attr.height]="visWorld.h"
+                  fill="url(#bg-sky)"
+                  opacity="0.45" />
+            @if (showGrid()) {
+              <rect [attr.x]="visWorld.x" [attr.y]="visWorld.y"
+                    [attr.width]="visWorld.w" [attr.height]="visWorld.h"
+                    fill="url(#grid-minor)" />
+              <rect [attr.x]="visWorld.x" [attr.y]="visWorld.y"
+                    [attr.width]="visWorld.w" [attr.height]="visWorld.h"
+                    fill="url(#grid-major)" />
+            }
+          </g>
+        </svg>
+
+        <div class="graph-wrap"
+             #graphEl
+             (dragover)="onGraphDragOver($event)"
+             (drop)="onGraphDrop($event)">
+        </div>
+      </div>
+
+      <!-- On-canvas zoom controls (overlay). Sits over the canvas so the
+           user can zoom + fit without leaving the graph; complements the
+           toolbar's Fit/Relayout buttons. -->
+      <div class="graph__controls">
+        <button class="iconbtn" title="Zoom in" type="button" (click)="zoomIn()">
+          <svg viewBox="0 0 16 16" width="14" height="14">
+            <path d="M8 3 L8 13 M3 8 L13 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+          </svg>
+        </button>
+        <button class="iconbtn" title="Zoom out" type="button" (click)="zoomOut()">
+          <svg viewBox="0 0 16 16" width="14" height="14">
+            <path d="M3 8 L13 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+          </svg>
+        </button>
+        <button class="iconbtn" title="Fit to view" type="button" (click)="fitGraph()">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6 L3 3 L6 3 M10 3 L13 3 L13 6 M13 10 L13 13 L10 13 M6 13 L3 13 L3 10"></path>
+          </svg>
+        </button>
+        <div class="zoom-readout">{{ zoomPercent }}<span>%</span></div>
+      </div>
+
+      @if (loadError) {
+        <div class="graph-error">
+          <div class="graph-error-title">Could not load configuration</div>
+          <div class="graph-error-body">{{ loadError }}</div>
+          <div class="graph-error-hint">Check the backend logs and try selecting the config again.</div>
+        </div>
+      }
+    </div>
+
+    <app-topology-palette
+        [agentTypes]="agentTypes"
+        [selectedVariantByType]="selectedVariantByType"
+        [isLoadedConfig]="isLoadedConfig"
+        (variantChange)="onVariantChange($event.type, $event.key)" />
+  </div>
+
+  <!-- ─── Right Panel ───────────────────────────────────────── -->
+  <app-agent-inspector
+      [selectedAgent]="selectedAgent"
+      [agentBlock]="agentBlock"
+      [agentBadgeColor]="selectedAgent ? getAgentColorStyle(selectedAgent) : '#888'"
+      [agentBadgeLabel]="selectedAgent ? labelOrId(selectedAgent) : ''"
+      [availableTools]="availableTools"
+      [currentAgentType]="currentAgentType"
+      [modelSelectOptions]="modelSelectOptions"
+      [modelFilter]="modelFilter"
+      [currentModelStatus]="currentModelStatus"
+      [currentTools]="currentTools"
+      [unusedToolOptionGroups]="unusedToolOptionGroups"
+      [unusedToolNamesCount]="unusedToolNames.length"
+      [toolParamsDraft]="toolParamsDraft"
+      [toolParamsError]="toolParamsError"
+      [isLoadedConfig]="isLoadedConfig"
+      [paramsOpen]="paramsOpen"
+      [toolsOpen]="toolsOpen"
+      [promptsOpen]="promptsOpen"
+      [promptTab]="promptTab"
+      (agentFieldChange)="onAgentField($any($event.key), $any($event.value))"
+      (modelFilterChange)="onModelFilterChange($event)"
+      (addTool)="addTool($event)"
+      (removeTool)="removeTool($event)"
+      (toolParamsInput)="onParamsInput($event.idx, $event.value)"
+      (promptChange)="onPromptChange($event.slot, $event.value)"
+      (togglePromptTabIntent)="togglePromptTab($event)"
+      (resetParams)="resetParams()"
+      (resetTools)="resetTools()"
+      (resetPrompts)="resetPrompts()"
+      (paramsOpenChange)="paramsOpen = $event"
+      (toolsOpenChange)="toolsOpen = $event"
+      (promptsOpenChange)="promptsOpen = $event" />
+
+</div>
+
+<!-- GitPython-backed version-history panel. Lives at the topology page
+     root so the slide-in covers the canvas + inspector at once. Hidden
+     for predefined configs (the History button is disabled there too).
+     `currentContentJson` + `agentTypes` enable the diff and graph
+     preview modes respectively — without them the panel falls back to
+     raw-JSON / no-diff behaviour. -->
+<app-config-history-panel
+    [open]="historyPanelOpen"
+    [configName]="currentConfigName"
+    [currentContent]="currentConfigJson"
+    [agentTypes]="agentTypes"
+    (restore)="onHistoryRestore($event)"
+    (close)="historyPanelOpen = false" />
+

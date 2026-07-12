@@ -1,0 +1,102 @@
+{
+  "id": "chain",
+  "description": "Type-driven linear chain: locator \u2192 patcher \u2192 reviewer \u2192 finalizer. Each agent inherits prompts/tools from its type class under evomas/agents/types/ \u2014 no bespoke Python.",
+  "entry": "locator",
+  "end": [
+    "finalizer"
+  ],
+  "edges": [
+    {
+      "from": "locator",
+      "to": "patcher"
+    },
+    {
+      "from": "patcher",
+      "to": "reviewer"
+    },
+    {
+      "from": "reviewer",
+      "to": "finalizer"
+    }
+  ],
+  "agents": {
+    "locator": {
+      "class": "LocatorAgent",
+      "model": "ollama/qwen3:8b",
+      "think": false,
+      "num_ctx": 8192,
+      "stream": true,
+      "temperature": 0.2,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [
+        "</files>"
+      ],
+      "max_iters": 6
+    },
+    "patcher": {
+      "class": "PatcherAgent",
+      "model": "ollama/qwen3:8b",
+      "think": true,
+      "num_ctx": 16384,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 2048,
+      "stop": [
+        "</patch>"
+      ],
+      "max_iters": 12,
+      "fallback": {
+        "enabled": true,
+        "guarantee_change": true
+      }
+    },
+    "reviewer": {
+      "class": "ReviewerAgent",
+      "model": "ollama/qwen3:8b",
+      "think": true,
+      "num_ctx": 4096,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 1024,
+      "stop": [
+        "</review>"
+      ],
+      "max_iters": 6
+    },
+    "finalizer": {
+      "class": "HelperProxyAgent",
+      "model": "ollama/qwen3:8b",
+      "think": true,
+      "num_ctx": 4096,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [],
+      "max_iters": 4
+    }
+  }
+}

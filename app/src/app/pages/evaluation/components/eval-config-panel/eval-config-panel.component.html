@@ -1,0 +1,174 @@
+<evo-box title="Evaluation Config" class="config-panel" [hasActions]="true">
+  <ng-container box-actions>
+    <button type="button" class="rail-toggle"
+            (click)="toggleCollapsed()"
+            [title]="collapsed() ? 'Expand panel' : 'Collapse panel'"
+            [attr.aria-expanded]="!collapsed()">
+      {{ collapsed() ? '»' : '«' }}
+    </button>
+  </ng-container>
+  @if (!collapsed()) {
+  <div class="config-body">
+
+    <!-- Predictions file -->
+    <div class="field-block">
+      <label class="field-label">Predictions file (.jsonl)</label>
+      <div class="pred-row">
+        @if (predictionOptions.length > 0) {
+          <evo-select class="pred-select"
+                      [options]="predictionOptions"
+                      [ngModel]="predictionsPath"
+                      (ngModelChange)="onPredictionsPathChange($event)"
+                      [disabled]="running" />
+        } @else {
+          <div class="empty-hint pred-select">No .jsonl files found in {{ predictionsDir }}/</div>
+        }
+        <input #predictionFile type="file" accept=".jsonl,application/x-ndjson,application/json"
+               (change)="predictionFileChosen.emit($event)" hidden />
+        <evo-button size="sm"
+                    [disabled]="running"
+                    (clicked)="predictionFile.click()"
+                    [title]="'Browse to a .jsonl prediction file (must live under ' + predictionsDir + '/)'">
+          <ng-icon name="folder" />
+        </evo-button>
+        <evo-button size="sm"
+                    (clicked)="refreshPredictions.emit()"
+                    title="Refresh predictions list"><ng-icon name="refresh" /></evo-button>
+      </div>
+      @if (filePickerError) {
+        <div class="hint-text err">{{ filePickerError }}</div>
+      }
+    </div>
+
+    <!-- Workers -->
+    <div class="field-block">
+      <label class="field-label">Max workers</label>
+      <evo-spinbox [min]="1" [max]="16" [step]="1"
+                   [ngModel]="maxWorkers"
+                   (ngModelChange)="onMaxWorkersChange($event)" />
+    </div>
+
+    <!-- Evaluator script. Options come from the parent which derives
+         them from the inspection: `apply_and_test` if any row is
+         custom, `run_swebench_evaluation` if any row is non-custom.
+         Empty array when neither matches -- the dropdown renders with
+         no items and the run button stays disabled. -->
+    <div class="field-block">
+      <label class="field-label">Evaluator script</label>
+      <evo-select [options]="evaluatorOptions"
+                  [ngModel]="evaluator"
+                  (ngModelChange)="onEvaluatorChange($event)"
+                  [disabled]="running || evaluatorOptions.length === 0" />
+      <div class="hint-text" style="margin-top: 4px; color: var(--text-muted)">
+        @if (evaluatorOptions.length === 0) {
+          No evaluator matches this prediction file -- inspection didn't find
+          custom or SWE-bench rows.
+        } @else {
+          Picked from <code>scripts/evaluation/</code>.
+        }
+      </div>
+    </div>
+
+    <!-- Subset / split / run ID — auto-detected from the prediction file.
+         Mixed predictions get one harness run per (subset, split) group. -->
+    <div class="field-block">
+      <span class="field-label">Subset / split / run ID</span>
+      @if (inspectionLoading) {
+        <div class="hint-text">inspecting…</div>
+      } @else if (inspectionError) {
+        <div class="hint-text err">{{ inspectionError }}</div>
+      } @else if (!inspection) {
+        <div class="hint-text">pick a predictions file</div>
+      } @else {
+        <div class="inspection-card">
+          <div class="inspection-meta">
+            <span class="meta-key">run_id base</span>
+            <span class="meta-val mono" [title]="inspection.run_id_base">{{ inspection.run_id_base }}</span>
+          </div>
+          <div class="inspection-meta">
+            <span class="meta-key">total</span>
+            <span class="meta-val">{{ inspection.total }} instance{{ inspection.total === 1 ? '' : 's' }}</span>
+          </div>
+          <div class="inspection-groups">
+            @for (g of inspection.groups; track g.subset + '/' + g.split) {
+              <div class="insp-group">
+                <div class="insp-head">
+                  <span class="insp-tag mono">{{ g.subset }}/{{ g.split }}</span>
+                  <span class="insp-count">{{ g.instance_ids.length }}</span>
+                </div>
+                <ul class="insp-ids">
+                  @for (id of g.instance_ids; track id) {
+                    <li class="mono">{{ id }}</li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+
+    <div class="run-row">
+      @if (!running) {
+        <evo-button variant="success"
+                    [disabled]="!predictionsPath || !evaluator"
+                    (clicked)="run.emit()">
+          <ng-icon name="play" /> Run Evaluation
+        </evo-button>
+      } @else {
+        <evo-button variant="danger" (clicked)="cancel.emit()"><ng-icon name="stop" /> Cancel</evo-button>
+      }
+    </div>
+
+    <!-- Progress -->
+    @if (running || progressPercent > 0) {
+      <div class="progress-block">
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" [style.width]="progressPercent + '%'"></div>
+        </div>
+        <div class="progress-text">
+          @if (progressTotal > 0) {
+            {{ progressDone }} / {{ progressTotal }} &nbsp;({{ progressPercent }}%)
+          } @else {
+            {{ progressPercent }}%
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Stats result -->
+    @if (stats) {
+      <div class="stats-block">
+        <div class="stat-row">
+          <span class="stat-label">Total</span>
+          <span class="stat-val">{{ stats.total }}</span>
+        </div>
+        <div class="stat-row resolved">
+          <span class="stat-label">Resolved</span>
+          <span class="stat-val">{{ stats.resolved }}</span>
+        </div>
+        <div class="stat-row failed">
+          <span class="stat-label">Failed</span>
+          <span class="stat-val">{{ stats.failed }}</span>
+        </div>
+        <div class="stat-row rate">
+          <span class="stat-label">Resolution rate</span>
+          <span class="stat-val pct">{{ stats.percent }}%</span>
+        </div>
+      </div>
+    }
+
+    @if (returnCode !== null && !running) {
+      <div class="return-code" [class.ok]="returnCode === 0" [class.err]="returnCode !== 0">
+        Process exited with code {{ returnCode }}
+      </div>
+    }
+
+    @if (errorMsg) {
+      <div class="eval-error">{{ errorMsg }}</div>
+    }
+
+  </div>
+  }
+</evo-box>

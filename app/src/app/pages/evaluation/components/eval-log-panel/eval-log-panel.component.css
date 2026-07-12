@@ -1,0 +1,56 @@
+:host {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The host is the logs-panel; let log-area handle its own scroll. */
+.logs-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.logs-panel ::ng-deep .evo-box-body {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.log-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.log-line { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
+
+/* Log segment colors — match the `LogLine` `c` field values emitted by
+   `evaluation-run.service.ts`. */
+.sl-ts       { color: #6e7681; }
+.sl-dim      { color: #484f58; }
+.sl-debug    { color: #58a6ff; }
+.sl-info     { color: #79c0ff; font-weight: 600; }
+.sl-warn     { color: #e3b341; font-weight: 600; }
+.sl-err      { color: #ff7b72; font-weight: 600; }
+.sl-text     { color: #c9d1d9; }
+.sl-ok       { color: #56d364; }
+.sl-warn-msg { color: #e3b341; }
+.sl-err-msg  { color: #ff7b72; }
+
+/* Toolbar spinner shown next to the Clear button when a run is active. */
+.spinner {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid rgba(88,166,255,.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-hint {
+  padding: 20px; text-align: center;
+  color: var(--text-muted); font-size: 12px;
+}

@@ -1,0 +1,94 @@
+/* The host MUST forward its `.left-box` class shape to the parent's
+ * `.topo-layout` flex container; `display: contents` lets the inner
+ * `<evo-box>` participate in the parent grid the same way the
+ * pre-refactor inline markup did. */
+:host { display: contents; }
+
+/* ─── Left box ───────────────────────────────────────────── */
+.left-box {
+  /* min-width (not width) so the panel starts at 300px but expands
+   * when content needs more room (e.g. a long config filename). The
+   * center column (flex: 1) shrinks to make room rather than being
+   * overlapped. */
+  min-width: 300px;
+  flex-grow: 0;
+  flex-shrink: 0;
+  transition: min-width 0.18s ease, width 0.18s ease;
+}
+/* Collapsed rail: narrow strip with just the toggle chevron. Override
+ * min-width so the rail can shrink to 36px. */
+.left-box.collapsed { min-width: 0; width: 36px; }
+.left-box.collapsed ::ng-deep .evo-box-title { display: none; }
+.left-box.collapsed ::ng-deep .evo-box-header {
+  padding: 6px 4px;
+  justify-content: center;
+}
+
+/* Rail-style chevron toggle in the box header. Same affordance the
+ * other pages use for their left panel — keep the look in sync. */
+.rail-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 1px 6px;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.rail-toggle:hover { color: var(--text); background: var(--bg-2); border-color: var(--border); }
+
+.topo-list { display: flex; flex-direction: column; gap: 1px; }
+.topo-item {
+  padding: 7px 10px;
+  cursor: pointer;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topo-item:hover { background: var(--bg-2); color: var(--text); }
+.topo-item.active { background: rgba(88,166,255,.12); color: var(--accent); font-weight: 600; }
+/* Predefined rows render as plain text; reserve enough space for the
+ * leading validity dot so the row contents stay aligned across rows
+ * with and without a badge. */
+.topo-item { display: flex; align-items: center; gap: 6px; }
+.topo-item .topo-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.topo-item.loaded .loaded-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
+/* Validity dot — red for errors, amber for warnings-only. Sits just
+ * left of the row name so the user can scan the list at a glance. */
+.validity-dot {
+  flex-shrink: 0;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.validity-dot--error { background: var(--danger, #f85149); }
+.validity-dot--warn  { background: #e3b341; }
+.topo-item.loaded .loaded-delete {
+  background: transparent; border: none; color: var(--text-muted);
+  cursor: pointer; padding: 0 4px; font-size: 14px; line-height: 1;
+  border-radius: 3px;
+}
+.topo-item.loaded .loaded-delete:hover { color: var(--danger); background: rgba(248,81,73,.1); }
+
+.topo-section-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--text-muted); font-weight: 600;
+  padding: 6px 10px 4px;
+}
+.topo-divider {
+  border: none; border-top: 1px solid var(--border);
+  margin: 10px 0 4px;
+}
+
+.empty-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
+}

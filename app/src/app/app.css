@@ -1,0 +1,105 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.navbar {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 16px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 100;
+  gap: 0;
+}
+
+.navbar-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-right: 24px;
+}
+
+.brand-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.brand-trigger:hover { background: var(--bg-2); }
+.brand-trigger.open { background: var(--bg-2); border-color: var(--border); }
+
+.logo { font-size: 20px; color: var(--accent); line-height: 1; }
+.brand-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+.brand-chevron { font-size: 10px; color: var(--text-muted); margin-left: 2px; }
+
+.brand-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 180px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.35);
+  padding: 4px;
+  z-index: 200;
+}
+
+.brand-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 4px;
+  text-align: left;
+}
+.brand-menu-item:hover { background: var(--bg-2); color: var(--accent); }
+.brand-menu-icon { font-size: 13px; }
+
+.nav-links { display: flex; align-items: center; gap: 2px; flex: 1; }
+
+.nav-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 6px;
+  color: var(--text-muted); text-decoration: none;
+  font-size: 13px; font-weight: 500;
+  transition: color 0.15s, background 0.15s;
+}
+.nav-link:hover { color: var(--text); background: var(--bg-2); }
+.nav-link.active { color: var(--accent); background: rgba(88,166,255,0.1); }
+
+.navbar-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); cursor: help; }
+.api-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-muted);
+  transition: background 0.2s;
+}
+.api-dot.online  { background: var(--success); animation: pulse 2.5s infinite; }
+.api-dot.offline { background: var(--danger);  animation: none; }
+.api-dot.unknown { background: var(--text-muted); animation: none; opacity: 0.6; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+.page-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; width: 100%; }
+
+/* Modal chrome (.modal-backdrop / .modal-card / .modal-*) lives in
+ * src/styles.css now -- it has to be global so route components can also
+ * render dialogs through the same class names. */

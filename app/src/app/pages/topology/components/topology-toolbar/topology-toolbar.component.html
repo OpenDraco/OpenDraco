@@ -1,0 +1,223 @@
+<!-- Toolbar -- left to right: page title + state chips, then 4 button
+     groups separated by thin dividers:
+       1. Edit (Add Edge, Delete) -- primary work on the active graph.
+       2. Validate -- pre-Save sanity check.
+       3. Save -- persistence; lit up when there are unsaved edits.
+       4. View  -- Relayout / Reload (less frequent, secondary).
+                   Fit lives in the on-canvas overlay alongside zoom. -->
+<div class="graph-toolbar"
+     [class.toolbar-cramped]="cramped">
+  <span class="topo-title">{{ currentConfigName || '-' }}</span>
+  @if (currentConfigName && !isLoadedConfig) {
+    <span class="readonly-chip"
+          title="Predefined configs are read-only. Use the brand menu's Export config… to keep an edited variant.">
+      read-only
+    </span>
+  }
+  @if (currentConfigName && isLoadedConfig && dirty) {
+    <span class="unsaved-chip"
+          title="In-memory edits not yet written to disk. Click Save to persist.">
+      unsaved
+    </span>
+  }
+  @if (currentConfigName && isLoadedConfig && !validated) {
+    <span class="unvalidated-chip"
+          title="Topology edits since the last Validate click haven't been re-checked. Click Validate to clear this — Save is disabled until you do.">
+      unvalidated
+    </span>
+  }
+  @if (currentConfig) {
+    <span class="topo-stats" [title]="topoStatsTooltip">
+      <span class="topo-stat">{{ agentCount }} <span class="topo-stat-unit">agents</span></span>
+      <span class="topo-stat">{{ edgeCount }} <span class="topo-stat-unit">edges</span></span>
+      <span class="topo-stat" [class.warn]="cycleCount > 0">
+        {{ cycleCount }} <span class="topo-stat-unit">cycles</span>
+      </span>
+    </span>
+  }
+  <div class="toolbar-sep"></div>
+
+  <!-- 1. Edit (group) -->
+  <evo-button [variant]="addEdgeMode ? 'active' : 'default'"
+              [disabled]="!isLoadedConfig"
+              (clicked)="toggleAddEdge.emit()"
+              title="Add Edge (Ctrl+A). Click two nodes to connect them. Drag from START to a node to set the entry point; drag from a node to END to toggle that node's membership in the config's `end` list (the nodes allowed to route to END at runtime).">
+    <ng-icon class="btn-icon" name="arrowUpRight" />
+    <span class="btn-label">{{ addEdgeMode ? (edgeSource ? 'Click target…' : 'Click source…') : 'Add Edge' }}</span>
+  </evo-button>
+  <evo-button variant="danger"
+              [disabled]="!isLoadedConfig || (!selectedAgent && !selectedEdgeId)"
+              (clicked)="deleteSelected.emit()"
+              title="Remove the selected node(s) or edge(s) from the in-memory graph. Hit Save to persist.">
+    <ng-icon class="btn-icon" name="bin" /><span class="btn-label">Delete</span>
+  </evo-button>
+  <evo-button [disabled]="!isLoadedConfig || !selectedAgent"
+              (clicked)="renameSelected.emit()"
+              title="Rename the selected node. The new name must not collide with any other node in this config; all edges, entry, and end references are updated automatically.">
+    <ng-icon class="btn-icon" name="pencil" /><span class="btn-label">Rename</span>
+  </evo-button>
+  <evo-button variant="ghost"
+              [disabled]="!isLoadedConfig || !canUndo"
+              (clicked)="undo.emit()"
+              title="Undo the last graph edit (Ctrl+Z). History lives in RAM and resets on Reload.">
+    <ng-icon class="btn-icon" name="undo" /><span class="btn-label">Undo</span>
+  </evo-button>
+  <evo-button variant="ghost"
+              [disabled]="!isLoadedConfig || !canRedo"
+              (clicked)="redo.emit()"
+              title="Redo the last undone edit (Ctrl+Y or Ctrl+Shift+Z).">
+    <ng-icon class="btn-icon" name="redo" /><span class="btn-label">Redo</span>
+  </evo-button>
+
+  <div class="toolbar-group-sep"></div>
+
+  <!-- 2. Validate -->
+  <evo-button [variant]="validateFlash ? 'success' : 'default'"
+              [disabled]="!currentConfig"
+              (clicked)="validate.emit()"
+              title="Check that entry / end / edges are well-formed and every node has degree > 0. Save also runs this and surfaces any issues as a warning.">
+    <ng-icon class="btn-icon" name="check" /><span class="btn-label">{{ validateFlash ? 'Valid' : 'Validate' }}</span>
+  </evo-button>
+
+  <div class="toolbar-group-sep"></div>
+
+  <!-- 3. Save (loaded configs only). Variant lights up when there are
+       unsaved edits so the button reads as the next-step action.
+       History sits immediately to the right of Save because the two
+       are a paired flow: Save commits a new version, History shows
+       the timeline of those commits and lets the user restore one. -->
+  @if (isLoadedConfig) {
+    <evo-button [variant]="saveFlash ? 'success' : (dirty ? 'primary' : 'default')"
+                [disabled]="!currentConfig || !validated"
+                (clicked)="saveToDisk.emit()"
+                title="Persist the current edits to evomas/config/loaded/{{ currentConfigName }}.json. Validate must run first — Save is disabled while the topology has unacknowledged edits; the validation panel surfaces issues but does not block Save.">
+      <ng-icon class="btn-icon" name="save" /><span class="btn-label">{{ saveFlash ? 'Saved' : 'Save' }}</span>
+    </evo-button>
+    <evo-button variant="ghost"
+                (clicked)="openHistoryPanel.emit()"
+                title="Show the version history of this loaded config — every Save action is recorded as a commit.">
+      <ng-icon class="btn-icon" name="clock" /><span class="btn-label">History</span>
+    </evo-button>
+  }
+
+  <div class="toolbar-group-sep"></div>
+
+  <!-- 4. View controls (Fit moved to the on-canvas overlay). -->
+  <evo-button variant="ghost"
+              [disabled]="!currentConfig"
+              (clicked)="relayout.emit()"
+              title="Discard saved positions and re-run the breadthfirst layout. Useful after lots of palette drops.">
+    <ng-icon class="btn-icon" name="shuffle" /><span class="btn-label">Relayout</span>
+  </evo-button>
+  <evo-button variant="ghost"
+              [disabled]="!currentConfig"
+              (clicked)="reloadGraph.emit()"
+              title="Re-fetch the active config from the backend and rebuild the canvas. Recovery for a stuck graph after switching configs.">
+    <ng-icon class="btn-icon" name="refresh" /><span class="btn-label">Reload</span>
+  </evo-button>
+
+  <div class="toolbar-group-sep"></div>
+
+  <!-- 5. Help: topology legend (edge types + execution model). Static
+       content, lives in the toolbar so users can call it up without
+       leaving the page. -->
+  <evo-help-popover title="Topology legend">
+    <div class="edge-legend">
+
+      <div class="legend-section-title">Edge types</div>
+      <div class="legend-rows">
+
+        <div class="legend-row">
+          <svg class="legend-swatch" viewBox="0 0 60 12" width="60" height="12" aria-hidden="true">
+            <line x1="2" y1="6" x2="50" y2="6" stroke="#30363d" stroke-width="2" stroke-linecap="round"></line>
+            <polygon points="50,2 58,6 50,10" fill="#30363d"></polygon>
+          </svg>
+          <div class="legend-text">
+            <div class="legend-name">Unconditional</div>
+            <div class="legend-desc">Always traversed when the source completes — the static <code>graph.add_edge(...)</code> case. <code>state[source]</code> is handed to the target and LangGraph schedules it in the next super-step.</div>
+          </div>
+        </div>
+
+        <div class="legend-row">
+          <svg class="legend-swatch" viewBox="0 0 60 12" width="60" height="12" aria-hidden="true">
+            <line x1="2" y1="6" x2="50" y2="6" stroke="#a371f7" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="6 4"></line>
+            <polygon points="50,2 58,6 50,10" fill="#a371f7"></polygon>
+          </svg>
+          <div class="legend-text">
+            <div class="legend-name">Conditional <span class="legend-tag">LLM-routed</span></div>
+            <div class="legend-desc">Source is an <code>Router</code> with ≥2 outgoing edges. The LLM emits target name(s); the router whole-word-matches and dispatches only those targets. Falls back to <em>all</em> targets on a parser miss so the run never stalls.</div>
+          </div>
+        </div>
+
+        <div class="legend-row">
+          <svg class="legend-swatch" viewBox="0 0 60 18" width="60" height="18" aria-hidden="true">
+            <path d="M50 14 Q30 -4 6 14" fill="none" stroke="#e3b341" stroke-width="2.2" stroke-linecap="round"></path>
+            <polygon points="10,10 2,14 10,18" fill="#e3b341"></polygon>
+          </svg>
+          <div class="legend-text">
+            <div class="legend-name">Loop-back / cycle</div>
+            <div class="legend-desc">DFS-detected back-edge (target on the recursion stack). Re-executes the cycle until LangGraph's <code>recursion_limit = max_revisits × num_agents</code> budget is reached.</div>
+          </div>
+        </div>
+
+        <div class="legend-row">
+          <svg class="legend-swatch" viewBox="0 0 60 12" width="60" height="12" aria-hidden="true">
+            <line x1="2" y1="6" x2="50" y2="6" stroke="#6e7681" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="4 2"></line>
+            <polygon points="50,2 58,6 50,10" fill="#6e7681"></polygon>
+          </svg>
+          <div class="legend-text">
+            <div class="legend-name">START / END (virtual)</div>
+            <div class="legend-desc">Connects the virtual <code>START</code> to <code>entry</code> and each <code>end</code> node to virtual <code>END</code>. Edit by dragging from / to the boundary nodes, not by direct manipulation.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="legend-section-title">Execution model</div>
+      <div class="legend-block">
+        <div>LangGraph runs the graph in <strong>super-steps</strong>. A node fires once per super-step, and only after <strong>every incoming edge scheduled in the prior super-step has completed</strong> — fan-in is a join.</div>
+        <div>When a node completes, <strong>every outgoing edge dispatches in the next super-step in parallel</strong>. Fan-out targets run concurrently; the super-step ends only when all of them are done.</div>
+      </div>
+
+    </div>
+  </evo-help-popover>
+</div>
+
+@if (validationErrors.length > 0) {
+  <div class="validation-panel" role="alert">
+    <div class="validation-head">
+      <strong>Configuration has validation errors</strong>
+      <button type="button" class="validation-dismiss"
+              (click)="dismissValidationErrors.emit()"
+              title="Dismiss">×</button>
+    </div>
+    <div class="validation-note">
+      Save will proceed, but the runtime may reject the graph at inference time.
+      Fix the listed issues before running.
+    </div>
+    <ul class="validation-list">
+      @for (msg of validationErrors; track msg) {
+        <li>{{ msg }}</li>
+      }
+    </ul>
+  </div>
+}
+@if (validationWarnings.length > 0) {
+  <div class="validation-panel validation-panel-warn" role="status">
+    <div class="validation-head">
+      <strong>Configuration warnings</strong>
+      <button type="button" class="validation-dismiss"
+              (click)="dismissValidationWarnings.emit()"
+              title="Dismiss">×</button>
+    </div>
+    <div class="validation-note">
+      The graph still compiles, but the listed nodes / settings will
+      waste inference cost or produce noisy runs.
+    </div>
+    <ul class="validation-list">
+      @for (msg of validationWarnings; track msg) {
+        <li>{{ msg }}</li>
+      }
+    </ul>
+  </div>
+}

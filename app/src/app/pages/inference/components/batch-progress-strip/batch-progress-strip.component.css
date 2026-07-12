@@ -1,0 +1,48 @@
+:host { display: contents; }
+
+.batch-progress {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  background: var(--bg-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 10px; flex-shrink: 0;
+}
+.bp-item {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 10px;
+  background: var(--bg-2); font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer; border: 1px solid var(--border);
+  font-family: inherit;
+}
+.bp-item:hover { color: var(--text); }
+.bp-item.active { background: rgba(88,166,255,.12); color: var(--accent); border-color: var(--accent); }
+.bp-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.bp-running .bp-dot { background: var(--accent); animation: pulse 1.5s infinite; }
+.bp-done .bp-dot    { background: var(--success); }
+.bp-error .bp-dot   { background: var(--danger);  }
+.bp-id,
+.bp-runid,
+.bp-logname {
+  font-family: monospace;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+.bp-runid,
+.bp-logname {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.75;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+/* The log-file pill sits to the right of the run-id chip and uses
+ * a very slightly recessed background so the two adjacent pills
+ * don't blur into one wide blob. */
+.bp-logname {
+  background: var(--bg-0);
+  opacity: 0.65;
+}
+@keyframes pulse { 50% { opacity: 0.4; } }

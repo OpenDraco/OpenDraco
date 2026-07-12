@@ -1,0 +1,28 @@
+{
+  "id": "websearch",
+  "description": "Single-agent web-research config. The user supplies a free-form question (via `--problem` on the CLI or the inline `problem_statement` field on a synthetic instance). The agent has one tool — `websearch` — and is instructed to ground its answer in the search results, citing sources by URL. No workspace, no file tools; the runner uses a throwaway tmpdir as workspace so the chain bookkeeping is happy.",
+  "entry": "researcher",
+  "end": ["researcher"],
+  "edges": [],
+  "agents": {
+    "researcher": {
+      "class": "Base agent",
+      "model": "ollama/qwen3:8b",
+      "think": true,
+      "num_ctx": 8192,
+      "temperature": 0.2,
+      "top_p": 0.9,
+      "num_predict": 2048,
+      "stop": [],
+      "max_iters": 6,
+      "prompts": {
+        "system": "You are a research assistant. Answer the user's question by calling the `websearch` tool one or more times, then synthesising the results into a concise answer that cites the URLs you used. Hard rules:\n- Call `websearch` at least once before answering.\n- Vary the query if the first hits aren't relevant.\n- Quote facts; don't invent ones the snippets don't support.\n- Your training data has a knowledge cutoff. The websearch results reflect the current state of the web — TRUST dates and version numbers in the snippets even if they look future-dated compared to your training. Do not second-guess the search results on the basis of \"that's later than I expect\".\n- Final answer format: a short paragraph (3-6 sentences) followed by a `Sources:` line listing the URLs you cited.\n- If (and only if) the question explicitly names an output path (e.g. \"write the answer to ./answer.md\"), call `save_text(path, content)` with the full final answer once you've composed it. Preserve the path the user gave EXACTLY, including any leading `./` — do not strip or rewrite it. `content` is the paragraph + Sources line, nothing else.\n- After the final answer (and the save_text call, if any), emit nothing else.",
+        "user": "Question:\n{issue_text}"
+      },
+      "tools": [
+        { "name": "websearch" },
+        { "name": "save_text" }
+      ]
+    }
+  }
+}
