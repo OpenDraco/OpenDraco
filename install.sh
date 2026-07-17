@@ -14,6 +14,34 @@ VENV_DIR="$HOME/.opendraco-venv"
 PYTHON_OPENDRACO="$VENV_DIR/bin/python"
 OPENDRACO_EXE="$VENV_DIR/bin/opendraco"
 
+# ── Arg parsing ───────────────────────────────────────────────────────────────
+# -y / --yes skips the confirmation prompt (automated / CI runs).
+AUTO_YES=0
+for arg in "$@"; do
+    case "$arg" in
+        -y|--yes) AUTO_YES=1 ;;
+        -h|--help)
+            echo "Usage: bash install.sh [-y|--yes]"
+            echo "  -y, --yes   skip the confirmation prompt (assume yes)"
+            exit 0 ;;
+        *) echo "[install] unknown arg: $arg (try --help)" >&2; exit 2 ;;
+    esac
+done
+
+# Prompt with a default of YES: empty input (just Enter) proceeds; only an
+# explicit n/no aborts. Bypassed entirely with -y/--yes. Guard `read` so an
+# EOF (non-interactive stdin) doesn't trip `set -e`; empty reply -> yes.
+confirm() {
+    [ "$AUTO_YES" = 1 ] && return 0
+    printf '%s [Y/n] ' "$1"
+    local reply=""
+    read -r reply || reply=""
+    case "$reply" in
+        ""|[yY]|[yY][eE][sS]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Prefer python3 over python (Linux/macOS convention).
 PYTHON_BIN="$(command -v python3 || command -v python || true)"
 if [ -z "$PYTHON_BIN" ]; then
@@ -46,6 +74,36 @@ npm_ok=0;    test_cli npm    "Install Node.js 18+ from https://nodejs.org/ (need
 [ "$ollama_ok" = 0 ] && echo "[install] continuing without ollama -- only needed for local models; 'opendraco ollama *' + ollama/* agents will fail until you install it."
 [ "$docker_ok" = 0 ] && echo "[install] continuing without docker -- only needed for local SWE-bench eval; 'opendraco run evaluation' (default --local) will fail; pass --remote to use sb-cli instead."
 [ "$npm_ok" = 0 ]    && echo "[install] continuing without npm -- only needed for the Angular frontend; 'opendraco web' will fail until you install Node.js."
+
+# ── 1b. Confirm before making changes ─────────────────────────────────────────
+# Summarise exactly what this run will do, reflecting the prerequisite results
+# above (feature-gated steps show as SKIP when their tool is missing).
+echo
+echo "[install] About to install OpenDraco. This will:"
+if [ -d "$VENV_DIR" ]; then
+    echo "  - reuse the existing Python venv at $VENV_DIR"
+else
+    echo "  - create a Python venv at $VENV_DIR"
+fi
+echo "  - pip install -e '.[dev]' (OpenDraco + pinned deps + dev extras), then freeze requirements.txt"
+echo "  - register an 'opendraco' Jupyter kernel ('Python 3 (OpenDraco)')"
+echo "  - add an 'opendraco' function to your shell startup file (~/.bashrc, ~/.zshrc, ...)"
+if [ "$npm_ok" = 1 ]; then
+    echo "  - run 'npm install' in app/ (Angular CLI + frontend deps)"
+else
+    echo "  - SKIP the frontend npm install (npm not found)"
+fi
+if [ "$docker_ok" = 1 ]; then
+    echo "  - clone SWE-bench and build its harness venv"
+else
+    echo "  - SKIP the SWE-bench harness (needs Docker)"
+fi
+echo "  - create opendraco/.env and api/.env from examples if missing (never overwrites)"
+echo
+if ! confirm "[install] Proceed?"; then
+    echo "[install] aborted by user."
+    exit 0
+fi
 
 # ── 2. Ensure the venv exists ────────────────────────────────────────────────
 # Non-destructive: never delete an existing venv. If something is broken,

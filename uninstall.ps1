@@ -41,20 +41,51 @@ function Remove-Tree {
 }
 
 $Purge = $false
+$AutoYes = $false
 foreach ($arg in $args) {
     switch ($arg) {
         "--purge" { $Purge = $true }
         "-Purge"  { $Purge = $true }
+        "-y"      { $AutoYes = $true }
+        "--yes"   { $AutoYes = $true }
+        "-Yes"    { $AutoYes = $true }
         default {
             if ($arg -in @("-h", "--help", "-Help")) {
-                Write-Host "Usage: .\uninstall.ps1 [--purge]"
-                Write-Host "  --purge   also remove the SWE-bench\ clone and opendraco\.env + api\.env (secrets!)"
+                Write-Host "Usage: .\uninstall.ps1 [--purge] [-y|--yes]"
+                Write-Host "  --purge     also remove the SWE-bench\ clone and opendraco\.env + api\.env (secrets!)"
+                Write-Host "  -y, --yes   skip the confirmation prompt (assume yes)"
                 exit 0
             }
             Write-Host "[uninstall] unknown arg: $arg (try --help)" -ForegroundColor Red
             exit 2
         }
     }
+}
+
+# Prompt with a default of YES: empty input (just Enter) proceeds; only an
+# explicit n/no aborts. Bypassed entirely with -y/--yes.
+function Read-YesNo($prompt) {
+    if ($AutoYes) { return $true }
+    $ans = Read-Host "$prompt [Y/n]"
+    if ([string]::IsNullOrWhiteSpace($ans)) { return $true }
+    return ($ans.Trim() -match '^(y|yes)$')
+}
+
+# --- Confirm before removing anything ----------------------------------------
+Write-Host "[uninstall] About to uninstall OpenDraco. This will remove:" -ForegroundColor Cyan
+Write-Host "  - the 'opendraco' Jupyter kernel"
+Write-Host "  - the 'opendraco' function block from your PowerShell profile ($PROFILE)"
+Write-Host "  - app\node_modules"
+Write-Host "  - the venv at $VenvDir"
+if ($Purge) {
+    Write-Host "  - --purge: the SWE-bench\ clone AND opendraco\.env + api\.env (your API keys!)" -ForegroundColor Yellow
+} else {
+    Write-Host "  - KEEPING the SWE-bench\ clone and .env files (pass --purge to remove them too)"
+}
+Write-Host ""
+if (-not (Read-YesNo "Proceed?")) {
+    Write-Host "[uninstall] aborted by user." -ForegroundColor Yellow
+    exit 0
 }
 
 # --- 1. Unregister the Jupyter kernel (before we delete the venv) ------------

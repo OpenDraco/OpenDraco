@@ -17,16 +17,50 @@ MARKER="# >>> opendraco-cli >>>"
 END_MARKER="# <<< opendraco-cli <<<"
 
 PURGE=0
+AUTO_YES=0
 for arg in "$@"; do
     case "$arg" in
         --purge) PURGE=1 ;;
+        -y|--yes) AUTO_YES=1 ;;
         -h|--help)
-            echo "Usage: bash uninstall.sh [--purge]"
-            echo "  --purge   also remove the SWE-bench/ clone and opendraco/.env + api/.env (secrets!)"
+            echo "Usage: bash uninstall.sh [--purge] [-y|--yes]"
+            echo "  --purge     also remove the SWE-bench/ clone and opendraco/.env + api/.env (secrets!)"
+            echo "  -y, --yes   skip the confirmation prompt (assume yes)"
             exit 0 ;;
         *) echo "[uninstall] unknown arg: $arg (try --help)" >&2; exit 2 ;;
     esac
 done
+
+# Prompt with a default of YES: empty input (just Enter) proceeds; only an
+# explicit n/no aborts. Bypassed entirely with -y/--yes. Guard `read` so an
+# EOF (non-interactive stdin) doesn't trip `set -e`; empty reply -> yes.
+confirm() {
+    [ "$AUTO_YES" = 1 ] && return 0
+    printf '%s [Y/n] ' "$1"
+    local reply=""
+    read -r reply || reply=""
+    case "$reply" in
+        ""|[yY]|[yY][eE][sS]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# ── Confirm before removing anything ──────────────────────────────────────────
+echo "[uninstall] About to uninstall OpenDraco. This will remove:"
+echo "  - the 'opendraco' Jupyter kernel"
+echo "  - the 'opendraco' function block from your shell rc files"
+echo "  - app/node_modules"
+echo "  - the venv at $VENV_DIR"
+if [ "$PURGE" = 1 ]; then
+    echo "  - --purge: the SWE-bench/ clone AND opendraco/.env + api/.env (your API keys!)"
+else
+    echo "  - KEEPING the SWE-bench/ clone and .env files (pass --purge to remove them too)"
+fi
+echo
+if ! confirm "[uninstall] Proceed?"; then
+    echo "[uninstall] aborted by user."
+    exit 0
+fi
 
 # ── 1. Unregister the Jupyter kernel (before we delete the venv) ──────────────
 # The kernelspec lives under the user's Jupyter data dir, not inside the venv,

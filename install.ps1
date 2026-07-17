@@ -10,6 +10,35 @@ $VenvDir  = Join-Path $HOME ".opendraco-venv"
 $PythonOpendraco = Join-Path $VenvDir "Scripts\python.exe"
 $OpendracoExe    = Join-Path $VenvDir "Scripts\opendraco.exe"
 
+# --- Arg parsing -------------------------------------------------------------
+# -y / --yes / -Yes skips the confirmation prompt (automated / CI runs).
+$AutoYes = $false
+foreach ($arg in $args) {
+    switch ($arg) {
+        "-y"    { $AutoYes = $true }
+        "--yes" { $AutoYes = $true }
+        "-Yes"  { $AutoYes = $true }
+        default {
+            if ($arg -in @("-h", "--help", "-Help")) {
+                Write-Host "Usage: .\install.ps1 [-y|--yes]"
+                Write-Host "  -y, --yes   skip the confirmation prompt (assume yes)"
+                exit 0
+            }
+            Write-Host "[install] unknown arg: $arg (try --help)" -ForegroundColor Red
+            exit 2
+        }
+    }
+}
+
+# Prompt with a default of YES: empty input (just Enter) proceeds; only an
+# explicit n/no aborts. Bypassed entirely with -y/--yes.
+function Read-YesNo($prompt) {
+    if ($AutoYes) { return $true }
+    $ans = Read-Host "$prompt [Y/n]"
+    if ([string]::IsNullOrWhiteSpace($ans)) { return $true }
+    return ($ans.Trim() -match '^(y|yes)$')
+}
+
 function Test-Cli($name, $hint) {
     $found = Get-Command $name -ErrorAction SilentlyContinue
     if (-not $found) {
@@ -67,6 +96,36 @@ if (-not $npmOk) {
 }
 if (-not $wslOk) {
     Write-Host "[install] continuing without WSL2 -- only needed for local SWE-bench eval on Windows ('opendraco run evaluation --local')."
+}
+
+# --- 1b. Confirm before making changes ---------------------------------------
+# Summarise exactly what this run will do, reflecting the prerequisite results
+# above (feature-gated steps show as SKIP when their tool is missing).
+Write-Host ""
+Write-Host "[install] About to install OpenDraco. This will:" -ForegroundColor Cyan
+if (Test-Path $VenvDir) {
+    Write-Host "  - reuse the existing Python venv at $VenvDir"
+} else {
+    Write-Host "  - create a Python venv at $VenvDir"
+}
+Write-Host '  - pip install -e ".[dev]" (OpenDraco + pinned deps + dev extras), then freeze requirements.txt'
+Write-Host "  - register an 'opendraco' Jupyter kernel ('Python 3 (OpenDraco)')"
+Write-Host "  - add an 'opendraco' function to your PowerShell profile ($PROFILE)"
+if ($npmOk) {
+    Write-Host "  - run 'npm install' in app\ (Angular CLI + frontend deps)"
+} else {
+    Write-Host "  - SKIP the frontend npm install (npm not found)" -ForegroundColor Yellow
+}
+if ($dockerOk -and $wslOk) {
+    Write-Host "  - clone SWE-bench and build its harness venv inside WSL"
+} else {
+    Write-Host "  - SKIP the SWE-bench harness (needs Docker + WSL2)" -ForegroundColor Yellow
+}
+Write-Host "  - create opendraco\.env and api\.env from examples if missing (never overwrites)"
+Write-Host ""
+if (-not (Read-YesNo "Proceed?")) {
+    Write-Host "[install] aborted by user." -ForegroundColor Yellow
+    exit 0
 }
 
 # --- 2. Ensure the venv exists -----------------------------------------------
