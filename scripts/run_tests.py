@@ -1,4 +1,4 @@
-"""Cross-platform runner for the EvoMas backend (pytest) + frontend (ng test) suites; extras after `--` forward verbatim to the inner runner."""
+"""Cross-platform runner for the OpenDraco backend (pytest) + frontend (ng test) suites; extras after `--` forward verbatim to the inner runner."""
 from __future__ import annotations
 
 import argparse
@@ -11,10 +11,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _venv_python() -> Path:
-    # install.{sh,ps1} install the venv at ~/.evomas-venv so the repo stays
+    # install.{sh,ps1} install the venv at ~/.opendraco-venv so the repo stays
     # free of build artefacts; start_api.* and the notebooks use the same
     # path. Keep this resolver in sync.
-    venv = Path.home() / ".evomas-venv"
+    venv = Path.home() / ".opendraco-venv"
     if os.name == "nt":
         return venv / "Scripts" / "python.exe"
     return venv / "bin" / "python"
@@ -35,10 +35,10 @@ def _run_backend(extra: list[str], integration: bool) -> int:
             file=sys.stderr,
         )
         return 1
-    cmd = [str(venv_py), "-m", "pytest", "evomas/tests", "-q", *extra]
+    cmd = [str(venv_py), "-m", "pytest", "opendraco/tests", "-q", *extra]
     env = os.environ.copy()
     if integration:
-        env["EVOMAS_RUN_INTEGRATION"] = "1"
+        env["OPENDRACO_RUN_INTEGRATION"] = "1"
     _banner("Backend (pytest)")
     print("$", " ".join(cmd), flush=True)
     return subprocess.run(cmd, cwd=str(REPO_ROOT), env=env).returncode
@@ -53,7 +53,7 @@ def _run_frontend(extra: list[str], integration: bool) -> int:
     cmd = ["npx", "ng", "test", "--watch=false", *extra]
     env = os.environ.copy()
     if integration:
-        env["EVOMAS_RUN_INTEGRATION"] = "1"
+        env["OPENDRACO_RUN_INTEGRATION"] = "1"
     _banner("Frontend (ng test)")
     print("$", " ".join(cmd), flush=True)
     return subprocess.run(
@@ -66,7 +66,7 @@ def _run_frontend(extra: list[str], integration: bool) -> int:
 
 def main() -> int:
     # Manual `--` split protects args even if they collide with our own flag
-    # names. Typer strips `--` when forwarding from `evomas test`, but
+    # names. Typer strips `--` when forwarding from `opendraco test`, but
     # parse_known_args below absorbs unknown flags into extras either way.
     argv = list(sys.argv[1:])
     explicit_extras: list[str] = []
@@ -76,7 +76,7 @@ def main() -> int:
         argv = argv[:idx]
 
     parser = argparse.ArgumentParser(
-        description="Run the EvoMas backend (pytest) and/or frontend (ng test) suites.",
+        description="Run the OpenDraco backend (pytest) and/or frontend (ng test) suites.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Pass --backend-only or --frontend-only to scope; "
@@ -90,7 +90,7 @@ def main() -> int:
     scope.add_argument("--frontend-only", action="store_true",
                        help="skip pytest; extra args go to ng test.")
     parser.add_argument("--integration", action="store_true",
-                        help="set EVOMAS_RUN_INTEGRATION=1 before running.")
+                        help="set OPENDRACO_RUN_INTEGRATION=1 before running.")
     args, unknown = parser.parse_known_args(argv)
     extras = unknown + explicit_extras
 

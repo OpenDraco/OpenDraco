@@ -2,17 +2,17 @@
 # Linux / macOS counterpart of install.ps1.
 # Behaviour mirrors the PowerShell script: non-destructive venv reuse,
 # `pip install -e "."`, regenerated requirements.txt lockfile, and
-# an idempotent `evomas` function appended to the user's shell rc.
+# an idempotent `opendraco` function appended to the user's shell rc.
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# Venv lives in the user's home (`~/.evomas-venv`) so the repo stays
+# Venv lives in the user's home (`~/.opendraco-venv`) so the repo stays
 # free of build artefacts and the same env can be shared across multiple
 # checkouts of the repo. start_api.sh + the rc-function appended below
 # both reference the same path.
-VENV_DIR="$HOME/.evomas-venv"
-PYTHON_EVOMAS="$VENV_DIR/bin/python"
-EVOMAS_EXE="$VENV_DIR/bin/evomas"
+VENV_DIR="$HOME/.opendraco-venv"
+PYTHON_OPENDRACO="$VENV_DIR/bin/python"
+OPENDRACO_EXE="$VENV_DIR/bin/opendraco"
 
 # Prefer python3 over python (Linux/macOS convention).
 PYTHON_BIN="$(command -v python3 || command -v python || true)"
@@ -37,15 +37,15 @@ test_cli() {
 echo "[install] checking prerequisites"
 echo "[install] python -> $PYTHON_BIN"
 ollama_ok=0; test_cli ollama "Install Ollama from https://ollama.com/download." && ollama_ok=1 || true
-docker_ok=0; test_cli docker "Install Docker (Desktop on macOS) from https://www.docker.com/products/docker-desktop/ (required for default 'evomas run evaluation --local')." && docker_ok=1 || true
+docker_ok=0; test_cli docker "Install Docker (Desktop on macOS) from https://www.docker.com/products/docker-desktop/ (required for default 'opendraco run evaluation --local')." && docker_ok=1 || true
 npm_ok=0;    test_cli npm    "Install Node.js 18+ from https://nodejs.org/ (needed for the Angular frontend)." && npm_ok=1 || true
 
 # Only python is mandatory (the check above aborts if it's missing). Ollama,
 # Docker and Node are feature-gated -- warn and continue so an inference-only
 # or CLI-only install still succeeds.
-[ "$ollama_ok" = 0 ] && echo "[install] continuing without ollama -- only needed for local models; 'evomas ollama *' + ollama/* agents will fail until you install it."
-[ "$docker_ok" = 0 ] && echo "[install] continuing without docker -- only needed for local SWE-bench eval; 'evomas run evaluation' (default --local) will fail; pass --remote to use sb-cli instead."
-[ "$npm_ok" = 0 ]    && echo "[install] continuing without npm -- only needed for the Angular frontend; 'evomas web' will fail until you install Node.js."
+[ "$ollama_ok" = 0 ] && echo "[install] continuing without ollama -- only needed for local models; 'opendraco ollama *' + ollama/* agents will fail until you install it."
+[ "$docker_ok" = 0 ] && echo "[install] continuing without docker -- only needed for local SWE-bench eval; 'opendraco run evaluation' (default --local) will fail; pass --remote to use sb-cli instead."
+[ "$npm_ok" = 0 ]    && echo "[install] continuing without npm -- only needed for the Angular frontend; 'opendraco web' will fail until you install Node.js."
 
 # ── 2. Ensure the venv exists ────────────────────────────────────────────────
 # Non-destructive: never delete an existing venv. If something is broken,
@@ -59,34 +59,34 @@ else
 fi
 
 echo "[install] upgrading pip + wheel"
-"$PYTHON_EVOMAS" -m pip install --upgrade pip wheel
+"$PYTHON_OPENDRACO" -m pip install --upgrade pip wheel
 
 # ── 3. Install the project ───────────────────────────────────────────────────
-# `-e "."` reads pyproject.toml; deps are pinned there and an `evomas`
-# console script is registered against `evomas.cli:main`.
-echo "[install] installing evomas (editable) + dependencies + dev extras"
-"$PYTHON_EVOMAS" -m pip install -e ".[dev]"
+# `-e "."` reads pyproject.toml; deps are pinned there and an `opendraco`
+# console script is registered against `opendraco.cli:main`.
+echo "[install] installing opendraco (editable) + dependencies + dev extras"
+"$PYTHON_OPENDRACO" -m pip install -e ".[dev]"
 
 # Snapshot exact resolved versions to requirements.txt for reproducibility /
 # recovery if a downstream package ships a breaking release. pyproject.toml
 # stays the canonical input; this file is a regenerated lockfile.
 echo "[install] freezing pinned versions to requirements.txt"
-"$PYTHON_EVOMAS" -m pip freeze > "$REPO_ROOT/requirements.txt"
+"$PYTHON_OPENDRACO" -m pip freeze > "$REPO_ROOT/requirements.txt"
 
 # ── 3b. Register the venv as a Jupyter kernel ────────────────────────────────
 # The "reproduce-this-run" notebook exported from the Results page sets
-# `kernelspec.name = "evomas"` so opening it in Jupyter / VSCode auto-picks
+# `kernelspec.name = "opendraco"` so opening it in Jupyter / VSCode auto-picks
 # this interpreter without the user having to hunt through the kernel
 # dropdown. `ipykernel` itself ships via the pip install above; this
 # step just publishes the kernelspec under the user's Jupyter data dir
 # (idempotent -- safe to re-run).
-echo "[install] registering 'evomas' Jupyter kernel"
-"$PYTHON_EVOMAS" -m ipykernel install --user --name evomas \
-    --display-name "Python 3 (EvoMas)" >/dev/null 2>&1 || \
+echo "[install] registering 'opendraco' Jupyter kernel"
+"$PYTHON_OPENDRACO" -m ipykernel install --user --name opendraco \
+    --display-name "Python 3 (OpenDraco)" >/dev/null 2>&1 || \
     echo "[install] warning: ipykernel registration failed (notebooks will fall back to a generic Python 3 kernel)"
 
 # ── 4. Install npm deps for the Angular frontend ─────────────────────────────
-# Without this, `npx ng serve` (invoked by `evomas web` / start_frontend.sh)
+# Without this, `npx ng serve` (invoked by `opendraco web` / start_frontend.sh)
 # resolves `ng` against the global npm registry, fetches a wrong package,
 # and exits with "could not determine executable to run". Running `npm
 # install` populates app/node_modules so npx finds the Angular CLI locally.
@@ -97,8 +97,8 @@ else
     echo "[install] skipping npm install -- node/npm not available."
 fi
 
-# ── 5. Shell-rc evomas function ──────────────────────────────────────────────
-# pip install -e . registers `evomas` inside the venv's bin/. To call it
+# ── 5. Shell-rc opendraco function ──────────────────────────────────────────────
+# pip install -e . registers `opendraco` inside the venv's bin/. To call it
 # from anywhere without activating the venv, append a function to the
 # user's shell rc that delegates to the venv binary.
 detect_shell_rc() {
@@ -111,8 +111,8 @@ detect_shell_rc() {
 }
 
 RC_PATH="$(detect_shell_rc)"
-MARKER="# >>> evomas-cli >>>"
-END_MARKER="# <<< evomas-cli <<<"
+MARKER="# >>> opendraco-cli >>>"
+END_MARKER="# <<< opendraco-cli <<<"
 
 mkdir -p "$(dirname "$RC_PATH")"
 [ ! -f "$RC_PATH" ] && touch "$RC_PATH"
@@ -121,12 +121,12 @@ mkdir -p "$(dirname "$RC_PATH")"
 # Substring match (`index() > 0`), not `$0 == s`, because earlier versions of
 # this script appended without a leading newline -- if the rc file didn't
 # end with a newline the start marker got concatenated onto the existing
-# last line (e.g. `. ~/.bashrc-extras# >>> evomas-cli >>>`). The robust
+# last line (e.g. `. ~/.bashrc-extras# >>> opendraco-cli >>>`). The robust
 # pass below preserves any text before the start marker on its line and
 # any text after the end marker on its line, so even a malformed previous
 # injection is cleaned up correctly.
 if grep -qF "$MARKER" "$RC_PATH"; then
-    echo "[install] refreshing existing evomas function in $RC_PATH"
+    echo "[install] refreshing existing opendraco function in $RC_PATH"
     awk -v s="$MARKER" -v e="$END_MARKER" '
         BEGIN { skip = 0 }
         {
@@ -161,24 +161,24 @@ fi
 if [[ "$RC_PATH" == *fish* ]]; then
     cat >> "$RC_PATH" <<EOF
 $MARKER
-function evomas
-    "$EVOMAS_EXE" \$argv
+function opendraco
+    "$OPENDRACO_EXE" \$argv
 end
 $END_MARKER
 EOF
 else
     cat >> "$RC_PATH" <<EOF
 $MARKER
-evomas() {
-    "$EVOMAS_EXE" "\$@"
+opendraco() {
+    "$OPENDRACO_EXE" "\$@"
 }
 $END_MARKER
 EOF
 fi
-echo "[install] appended evomas function to $RC_PATH"
+echo "[install] appended opendraco function to $RC_PATH"
 
 # ── 6. Set up the SWE-bench harness (local evaluation only) ──────────────────
-# `evomas run evaluation` defaults to --local, which drives the official
+# `opendraco run evaluation` defaults to --local, which drives the official
 # SWE-bench Docker harness. That harness is NOT a pip dependency; it lives in a
 # sibling clone at <repo>/SWE-bench with its own venv. It's only usable when
 # Docker is present (the harness runs each instance in a container), so we gate
@@ -195,7 +195,7 @@ else
     else
         echo "[install] cloning SWE-bench harness into $SWEBENCH_DIR"
         git clone https://github.com/SWE-bench/SWE-bench.git "$SWEBENCH_DIR" || \
-            echo "[install] warning: SWE-bench clone failed -- 'evomas run evaluation --local' will not work until you clone it manually."
+            echo "[install] warning: SWE-bench clone failed -- 'opendraco run evaluation --local' will not work until you clone it manually."
     fi
     # Build the harness venv (idempotent -- skipped if already built).
     if [ -d "$SWEBENCH_DIR" ]; then
@@ -217,11 +217,11 @@ fi
 # ── 7. .env scaffolding ──────────────────────────────────────────────────────
 # Copy the example env files into place (non-destructive: never clobber an
 # existing .env). Fill in OLLAMA_BASE_URL etc. afterwards -- see README.
-if [ ! -f "$REPO_ROOT/evomas/.env" ]; then
-    cp "$REPO_ROOT/evomas/.env.example" "$REPO_ROOT/evomas/.env"
-    echo "[install] created evomas/.env from evomas/.env.example -- fill in OLLAMA_BASE_URL"
+if [ ! -f "$REPO_ROOT/opendraco/.env" ]; then
+    cp "$REPO_ROOT/opendraco/.env.example" "$REPO_ROOT/opendraco/.env"
+    echo "[install] created opendraco/.env from opendraco/.env.example -- fill in OLLAMA_BASE_URL"
 else
-    echo "[install] evomas/.env already exists (leaving as-is)"
+    echo "[install] opendraco/.env already exists (leaving as-is)"
 fi
 if [ ! -f "$REPO_ROOT/api/.env" ]; then
     cp "$REPO_ROOT/api/.env.example" "$REPO_ROOT/api/.env"
@@ -234,9 +234,9 @@ echo
 echo "[install] done."
 echo "        Source your rc (\`source $RC_PATH\`) or open a new terminal, then:"
 echo
-echo "          evomas --help                                  # uses the venv via the rc function"
+echo "          opendraco --help                                  # uses the venv via the rc function"
 echo
-echo "        For interactive dev work (running pytest, importing evomas modules, etc.)"
+echo "        For interactive dev work (running pytest, importing opendraco modules, etc.)"
 echo "        activate the venv directly:"
 echo
 echo "          source $VENV_DIR/bin/activate                  # then \`python\`, \`pytest\`, \`pip\` target the venv"

@@ -2,13 +2,13 @@ $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
 
 $RepoRoot = $PSScriptRoot
-# Venv lives in the user's home (`~\.evomas-venv`) so the repo stays
+# Venv lives in the user's home (`~\.opendraco-venv`) so the repo stays
 # free of build artefacts and the same env can be shared across multiple
 # checkouts of the repo. start_api.ps1 + the $PROFILE wrapper appended
 # at the end of this script both reference the same path.
-$VenvDir  = Join-Path $HOME ".evomas-venv"
-$PythonEvomas = Join-Path $VenvDir "Scripts\python.exe"
-$EvomasExe    = Join-Path $VenvDir "Scripts\evomas.exe"
+$VenvDir  = Join-Path $HOME ".opendraco-venv"
+$PythonOpendraco = Join-Path $VenvDir "Scripts\python.exe"
+$OpendracoExe    = Join-Path $VenvDir "Scripts\opendraco.exe"
 
 function Test-Cli($name, $hint) {
     $found = Get-Command $name -ErrorAction SilentlyContinue
@@ -57,16 +57,16 @@ if (-not $pythonOk) {
     exit 1
 }
 if (-not $ollamaOk) {
-    Write-Host "[install] continuing without ollama -- only needed for local models; `evomas ollama *` + ollama/* agents will fail until you install it."
+    Write-Host "[install] continuing without ollama -- only needed for local models; `opendraco ollama *` + ollama/* agents will fail until you install it."
 }
 if (-not $dockerOk) {
-    Write-Host "[install] continuing without docker -- only needed for local SWE-bench eval; `evomas run evaluation` (default --local) will fail; pass --remote to use sb-cli instead."
+    Write-Host "[install] continuing without docker -- only needed for local SWE-bench eval; `opendraco run evaluation` (default --local) will fail; pass --remote to use sb-cli instead."
 }
 if (-not $npmOk) {
-    Write-Host "[install] continuing without npm -- only needed for the Angular frontend; `evomas web` will fail until you install Node.js."
+    Write-Host "[install] continuing without npm -- only needed for the Angular frontend; `opendraco web` will fail until you install Node.js."
 }
 if (-not $wslOk) {
-    Write-Host "[install] continuing without WSL2 -- only needed for local SWE-bench eval on Windows ('evomas run evaluation --local')."
+    Write-Host "[install] continuing without WSL2 -- only needed for local SWE-bench eval on Windows ('opendraco run evaluation --local')."
 }
 
 # --- 2. Ensure the venv exists -----------------------------------------------
@@ -82,34 +82,34 @@ if (Test-Path $VenvDir) {
 }
 
 Write-Host "[install] upgrading pip + wheel" -ForegroundColor Cyan
-& $PythonEvomas -m pip install --upgrade pip wheel
+& $PythonOpendraco -m pip install --upgrade pip wheel
 
 # --- 3. Install the project --------------------------------------------------
-# `-e .` reads pyproject.toml; deps are pinned there and an `evomas` console
-# script is registered against `evomas.cli:main`. No more hand-maintained
+# `-e .` reads pyproject.toml; deps are pinned there and an `opendraco` console
+# script is registered against `opendraco.cli:main`. No more hand-maintained
 # `pip install langchain langgraph ...` list.
-Write-Host "[install] installing evomas (editable) + dependencies + dev extras" -ForegroundColor Cyan
-& $PythonEvomas -m pip install -e ".[dev]"
+Write-Host "[install] installing opendraco (editable) + dependencies + dev extras" -ForegroundColor Cyan
+& $PythonOpendraco -m pip install -e ".[dev]"
 
 # Snapshot exact resolved versions to requirements.txt for reproducibility /
 # recovery if a downstream package ships a breaking release. pyproject.toml
 # stays the canonical input; this file is a regenerated lockfile.
 Write-Host "[install] freezing pinned versions to requirements.txt" -ForegroundColor Cyan
-& $PythonEvomas -m pip freeze | Out-File -Encoding utf8 (Join-Path $RepoRoot "requirements.txt")
+& $PythonOpendraco -m pip freeze | Out-File -Encoding utf8 (Join-Path $RepoRoot "requirements.txt")
 
 # --- 3b. Register the venv as a Jupyter kernel ------------------------------
 # The "reproduce-this-run" notebook exported from the Results page sets
-# `kernelspec.name = "evomas"` so opening it in Jupyter / VSCode auto-picks
+# `kernelspec.name = "opendraco"` so opening it in Jupyter / VSCode auto-picks
 # this interpreter without the user having to hunt through the kernel
 # dropdown. `ipykernel` itself ships via the pip install above; this
 # step just publishes the kernelspec under the user's Jupyter data dir
 # (idempotent -- safe to re-run).
-Write-Host "[install] registering 'evomas' Jupyter kernel" -ForegroundColor Cyan
-& $PythonEvomas -m ipykernel install --user --name evomas `
-    --display-name "Python 3 (EvoMas)" 2>&1 | Out-Null
+Write-Host "[install] registering 'opendraco' Jupyter kernel" -ForegroundColor Cyan
+& $PythonOpendraco -m ipykernel install --user --name opendraco `
+    --display-name "Python 3 (OpenDraco)" 2>&1 | Out-Null
 
 # --- 4. Install npm deps for the Angular frontend ---------------------------
-# Without this, `npx ng serve` (invoked by `evomas web` / start_frontend.ps1)
+# Without this, `npx ng serve` (invoked by `opendraco web` / start_frontend.ps1)
 # resolves `ng` against the global npm registry, fetches the wrong package,
 # and exits with "could not determine executable to run". `npm install`
 # populates app\node_modules so npx finds the Angular CLI locally.
@@ -126,7 +126,7 @@ if ($npmOk) {
 }
 
 # --- 5. PowerShell $PROFILE wrapper -----------------------------------------
-# pip install -e . registers `evomas.exe` inside the venv. To call it from
+# pip install -e . registers `opendraco.exe` inside the venv. To call it from
 # anywhere without activating the venv first, append a function to the
 # user's PowerShell profile that delegates to the venv's exe.
 $ProfilePath = $PROFILE
@@ -134,11 +134,11 @@ $ProfileDir  = Split-Path -Parent $ProfilePath
 if (-not (Test-Path $ProfileDir)) { New-Item -ItemType Directory -Path $ProfileDir -Force | Out-Null }
 if (-not (Test-Path $ProfilePath)) { New-Item -ItemType File -Path $ProfilePath -Force | Out-Null }
 
-$Marker = "# >>> evomas-cli >>>"
-$EndMarker = "# <<< evomas-cli <<<"
+$Marker = "# >>> opendraco-cli >>>"
+$EndMarker = "# <<< opendraco-cli <<<"
 $existing = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
 if ($existing -and $existing.Contains($Marker)) {
-    Write-Host "[install] refreshing existing evomas function in $ProfilePath" -ForegroundColor Cyan
+    Write-Host "[install] refreshing existing opendraco function in $ProfilePath" -ForegroundColor Cyan
     $pattern = "(?ms)" + [regex]::Escape($Marker) + ".*?" + [regex]::Escape($EndMarker)
     $existing = [regex]::Replace($existing, $pattern, "").TrimEnd() + "`r`n"
     Set-Content -Path $ProfilePath -Value $existing -Encoding utf8
@@ -146,16 +146,16 @@ if ($existing -and $existing.Contains($Marker)) {
 
 $Block = @"
 $Marker
-function evomas {
-    & "$EvomasExe" @args
+function opendraco {
+    & "$OpendracoExe" @args
 }
 $EndMarker
 "@
 Add-Content -Path $ProfilePath -Value $Block -Encoding utf8
-Write-Host "[install] appended evomas function to $ProfilePath" -ForegroundColor Green
+Write-Host "[install] appended opendraco function to $ProfilePath" -ForegroundColor Green
 
 # --- 6. Set up the SWE-bench harness (local evaluation only) -----------------
-# `evomas run evaluation` defaults to --local, which drives the official
+# `opendraco run evaluation` defaults to --local, which drives the official
 # SWE-bench Docker harness. That harness is NOT a pip dependency; it lives in a
 # sibling clone at <repo>\SWE-bench with its own venv. It's POSIX-only and needs
 # Docker to run, so on Windows it requires BOTH Docker and WSL2 -- we gate the
@@ -177,7 +177,7 @@ if (-not ($dockerOk -and $wslOk)) {
         Write-Host "[install] cloning SWE-bench harness into $SwebenchDir" -ForegroundColor Cyan
         git clone https://github.com/SWE-bench/SWE-bench.git $SwebenchDir
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "[install] warning: SWE-bench clone failed -- 'evomas run evaluation --local' will not work until you clone it manually." -ForegroundColor Yellow
+            Write-Host "[install] warning: SWE-bench clone failed -- 'opendraco run evaluation --local' will not work until you clone it manually." -ForegroundColor Yellow
         }
     }
     # Build the harness venv inside WSL (idempotent -- skipped if already built).
@@ -201,12 +201,12 @@ if (-not ($dockerOk -and $wslOk)) {
 # --- 7. .env scaffolding -----------------------------------------------------
 # Copy the example env files into place (non-destructive: never clobber an
 # existing .env). Fill in OLLAMA_BASE_URL etc. afterwards -- see README.
-$EvomasEnv = Join-Path $RepoRoot "evomas\.env"
-if (-not (Test-Path $EvomasEnv)) {
-    Copy-Item (Join-Path $RepoRoot "evomas\.env.example") $EvomasEnv
-    Write-Host "[install] created evomas\.env from evomas\.env.example -- fill in OLLAMA_BASE_URL" -ForegroundColor Green
+$OpendracoEnv = Join-Path $RepoRoot "opendraco\.env"
+if (-not (Test-Path $OpendracoEnv)) {
+    Copy-Item (Join-Path $RepoRoot "opendraco\.env.example") $OpendracoEnv
+    Write-Host "[install] created opendraco\.env from opendraco\.env.example -- fill in OLLAMA_BASE_URL" -ForegroundColor Green
 } else {
-    Write-Host "[install] evomas\.env already exists (leaving as-is)" -ForegroundColor Cyan
+    Write-Host "[install] opendraco\.env already exists (leaving as-is)" -ForegroundColor Cyan
 }
 $ApiEnv = Join-Path $RepoRoot "api\.env"
 if (-not (Test-Path $ApiEnv)) {
@@ -220,9 +220,9 @@ Write-Host ""
 Write-Host "[install] done." -ForegroundColor Green
 Write-Host "        Open a fresh PowerShell window so the new \$PROFILE function loads, then:"
 Write-Host ""
-Write-Host "          evomas --help                                  # uses the venv automatically via the profile function"
+Write-Host "          opendraco --help                                  # uses the venv automatically via the profile function"
 Write-Host ""
-Write-Host "        For interactive dev work (running pytest, importing evomas modules, etc.)"
+Write-Host "        For interactive dev work (running pytest, importing opendraco modules, etc.)"
 Write-Host "        activate the venv directly:"
 Write-Host ""
 Write-Host "          & `"$VenvDir\Scripts\Activate.ps1`"             # then `python`, `pytest`, `pip` target the venv"

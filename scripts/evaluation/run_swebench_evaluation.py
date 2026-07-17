@@ -2,7 +2,7 @@
 this through WSL (`swebench` is POSIX-only)."""
 
 # swebench is POSIX-only; manifest tells the API + CLI to wrap in WSL.
-EVOMAS_EVALUATOR = {"needs_wsl": True}
+OPENDRACO_EVALUATOR = {"needs_wsl": True}
 
 import argparse
 import importlib.util
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # SWE-bench repo location. Override with the SWEBENCH_DIR env var; a relative
-# value resolves against the EvoMas repo root. Default: <repo>/SWE-bench. The
+# value resolves against the OpenDraco repo root. Default: <repo>/SWE-bench. The
 # harness venv is expected at <SWEBENCH_DIR>/venv.
 _sb_dir = os.environ.get("SWEBENCH_DIR", "").strip()
 SWEBENCH_DIR = (
@@ -197,7 +197,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--predictions",
-        default="evomas_predictions.jsonl",
+        default="opendraco_predictions.jsonl",
         help="Path to the JSONL predictions file",
     )
     parser.add_argument(
@@ -277,7 +277,7 @@ def main() -> None:
         sys.exit(1)
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    base_run_id = args.run_id or f"evomas-{ts}"
+    base_run_id = args.run_id or f"opendraco-{ts}"
     report_dir = args.report_dir or "."
     tmp_dir = Path(report_dir) / "_tmp_predictions"
     tmp_dir.mkdir(parents=True, exist_ok=True)

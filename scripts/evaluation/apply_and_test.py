@@ -1,5 +1,5 @@
-"""Apply EvoMas patches to their repos and run the tests, optionally writing a SWE-bench-compatible report layout for the Results page."""
-# No `EVOMAS_EVALUATOR` manifest needed -- single_shot dispatch + no
+"""Apply OpenDraco patches to their repos and run the tests, optionally writing a SWE-bench-compatible report layout for the Results page."""
+# No `OPENDRACO_EVALUATOR` manifest needed -- single_shot dispatch + no
 # WSL are the framework defaults. See `docs/adding_a_new_problem.md`.
 
 import argparse
@@ -15,17 +15,17 @@ from typing import Any
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Reuse evomas.tools.patch_tools.apply_patch_impl when importable so we get the
+# Reuse opendraco.tools.patch_tools.apply_patch_impl when importable so we get the
 # `patch --fuzz=5` fallback for LLM-generated diffs with wrong hunk line numbers.
 # scripts/evaluation/<this>.py -- parents[2] = repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 try:
-    from evomas.utils.patch import apply_patch_impl, normalize_patch_impl  # noqa: E402
-    _HAS_EVOMAS_PATCH_TOOLS = True
+    from opendraco.utils.patch import apply_patch_impl, normalize_patch_impl  # noqa: E402
+    _HAS_OPENDRACO_PATCH_TOOLS = True
 except Exception:  # pragma: no cover
-    _HAS_EVOMAS_PATCH_TOOLS = False
+    _HAS_OPENDRACO_PATCH_TOOLS = False
 
 from rich.console import Console
 from rich.table import Table
@@ -64,7 +64,7 @@ def _parse_list(value: Any) -> list[str]:
 
 
 def _workspace_root() -> Path:
-    root = Path(tempfile.gettempdir()) / "evomas_workspace"
+    root = Path(tempfile.gettempdir()) / "opendraco_workspace"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -178,11 +178,11 @@ def clone_or_reuse(repo: str, base_commit: str, keep: bool = False) -> Path:
 
 
 def apply_patch(patch: str, workspace: Path) -> tuple[bool, str]:
-    """Apply a unified diff via evomas.tools.patch_tools when importable, else plain `git apply` so the script stays usable standalone."""
+    """Apply a unified diff via opendraco.tools.patch_tools when importable, else plain `git apply` so the script stays usable standalone."""
     if not patch or not patch.strip():
         return False, "empty patch"
 
-    if _HAS_EVOMAS_PATCH_TOOLS:
+    if _HAS_OPENDRACO_PATCH_TOOLS:
         normalized = normalize_patch_impl(patch)  # pyright: ignore[reportPossiblyUnboundVariable]
         res = apply_patch_impl(normalized or patch, str(workspace), dry_run=False)  # pyright: ignore[reportPossiblyUnboundVariable]
         if res["applied"]:
@@ -471,8 +471,8 @@ def main() -> None:
                              "<report-dir>/logs/run_evaluation/<run-id>/<model>/<instance_id>/")
     parser.add_argument("--run-id",      default="",
                         help="Run identifier used in the report path. Defaults to a timestamp.")
-    parser.add_argument("--model",       default="evomas-custom",
-                        help="Model name used in the report path. Default: 'evomas-custom'.")
+    parser.add_argument("--model",       default="opendraco-custom",
+                        help="Model name used in the report path. Default: 'opendraco-custom'.")
     parser.add_argument("--instance-id", dest="instance_id", default="",
                         help="When set, narrow the apply+test loop to this single "
                              "instance_id. Must exist in both --instances and "

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reverse of install.sh (Linux / macOS / WSL). Removes the artefacts install.sh
-# creates: the ~/.evomas-venv, the `evomas` function in your shell rc, the
-# 'evomas' Jupyter kernel, and app/node_modules. Your data is left alone by
+# creates: the ~/.opendraco-venv, the `opendraco` function in your shell rc, the
+# 'opendraco' Jupyter kernel, and app/node_modules. Your data is left alone by
 # default -- pass --purge to ALSO delete the SWE-bench clone and the .env files
 # (which hold your API keys). Idempotent: safe to re-run, no-ops on anything
 # already gone.
@@ -9,12 +9,12 @@ set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # Same path install.sh / start_api.sh / run_tests.py use.
-VENV_DIR="$HOME/.evomas-venv"
-PYTHON_EVOMAS="$VENV_DIR/bin/python"
+VENV_DIR="$HOME/.opendraco-venv"
+PYTHON_OPENDRACO="$VENV_DIR/bin/python"
 
 # Markers install.sh wraps its rc function in (kept in sync with install.sh).
-MARKER="# >>> evomas-cli >>>"
-END_MARKER="# <<< evomas-cli <<<"
+MARKER="# >>> opendraco-cli >>>"
+END_MARKER="# <<< opendraco-cli <<<"
 
 PURGE=0
 for arg in "$@"; do
@@ -22,7 +22,7 @@ for arg in "$@"; do
         --purge) PURGE=1 ;;
         -h|--help)
             echo "Usage: bash uninstall.sh [--purge]"
-            echo "  --purge   also remove the SWE-bench/ clone and evomas/.env + api/.env (secrets!)"
+            echo "  --purge   also remove the SWE-bench/ clone and opendraco/.env + api/.env (secrets!)"
             exit 0 ;;
         *) echo "[uninstall] unknown arg: $arg (try --help)" >&2; exit 2 ;;
     esac
@@ -32,16 +32,16 @@ done
 # The kernelspec lives under the user's Jupyter data dir, not inside the venv,
 # so it must be removed explicitly. Use the venv's python while it still exists;
 # fall back to any jupyter on PATH.
-if [ -x "$PYTHON_EVOMAS" ]; then
-    echo "[uninstall] removing 'evomas' Jupyter kernel"
-    "$PYTHON_EVOMAS" -m jupyter kernelspec remove -f evomas >/dev/null 2>&1 || \
+if [ -x "$PYTHON_OPENDRACO" ]; then
+    echo "[uninstall] removing 'opendraco' Jupyter kernel"
+    "$PYTHON_OPENDRACO" -m jupyter kernelspec remove -f opendraco >/dev/null 2>&1 || \
         echo "[uninstall] (kernel not registered or jupyter unavailable -- skipping)"
 elif command -v jupyter >/dev/null 2>&1; then
-    echo "[uninstall] removing 'evomas' Jupyter kernel"
-    jupyter kernelspec remove -f evomas >/dev/null 2>&1 || true
+    echo "[uninstall] removing 'opendraco' Jupyter kernel"
+    jupyter kernelspec remove -f opendraco >/dev/null 2>&1 || true
 fi
 
-# ── 2. Strip the evomas function block from every shell rc that carries it ────
+# ── 2. Strip the opendraco function block from every shell rc that carries it ────
 # install.sh only ever writes to the current shell's rc, but a user may have
 # run it under more than one shell -- clean them all. The awk pass mirrors the
 # robust marker-strip install.sh uses (preserves any text on the marker lines).
@@ -49,7 +49,7 @@ strip_rc() {
     local rc="$1"
     [ -f "$rc" ] || return 0
     grep -qF "$MARKER" "$rc" || return 0
-    echo "[uninstall] removing evomas function from $rc"
+    echo "[uninstall] removing opendraco function from $rc"
     awk -v s="$MARKER" -v e="$END_MARKER" '
         BEGIN { skip = 0 }
         {
@@ -97,7 +97,7 @@ if [ "$PURGE" = 1 ]; then
         echo "[uninstall] --purge: removing SWE-bench clone at $REPO_ROOT/SWE-bench"
         rm -rf "$REPO_ROOT/SWE-bench"
     fi
-    for env_file in "$REPO_ROOT/evomas/.env" "$REPO_ROOT/api/.env"; do
+    for env_file in "$REPO_ROOT/opendraco/.env" "$REPO_ROOT/api/.env"; do
         if [ -f "$env_file" ]; then
             echo "[uninstall] --purge: removing $env_file (held your secrets)"
             rm -f "$env_file"
@@ -109,4 +109,4 @@ fi
 
 echo
 echo "[uninstall] done. Open a new shell (or re-source your rc) so the removed"
-echo "            evomas function clears from your current session."
+echo "            opendraco function clears from your current session."

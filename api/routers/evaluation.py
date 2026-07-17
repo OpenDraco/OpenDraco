@@ -26,13 +26,13 @@ from api.common import (
     SWEBENCH_VENV_PYTHON,
     safe_under,
 )
-from evomas.paths import (
+from opendraco.paths import (
     INFERENCE_INTERNAL_LOGS_DIR,
     PREDICTION_TEXT_LOGS_DIR,
 )
-from evomas.utils.instances import instance_origin_lookup, load_instance_rows
-from evomas.utils.paths import to_wsl
-from evomas.utils.predictions import derive_run_id_base
+from opendraco.utils.instances import instance_origin_lookup, load_instance_rows
+from opendraco.utils.paths import to_wsl
+from opendraco.utils.predictions import derive_run_id_base
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ _DEFAULT_MANIFEST = {"needs_wsl": False}
 
 
 def _eval_manifest(stem: str) -> dict[str, Any]:
-    """Read `EVOMAS_EVALUATOR` from `scripts/evaluation/<stem>.py` (or
+    """Read `OPENDRACO_EVALUATOR` from `scripts/evaluation/<stem>.py` (or
     fall back to defaults when missing / unparseable)."""
     script_path = BASE_DIR / "scripts" / "evaluation" / f"{stem}.py"
     if not script_path.is_file():
@@ -102,7 +102,7 @@ def _eval_manifest(stem: str) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("evaluator %s import failed: %s; using defaults", stem, exc)
         return {**_DEFAULT_MANIFEST}
-    declared = getattr(mod, "EVOMAS_EVALUATOR", None)
+    declared = getattr(mod, "OPENDRACO_EVALUATOR", None)
     if not isinstance(declared, dict):
         return {**_DEFAULT_MANIFEST}
     return {**_DEFAULT_MANIFEST, **declared}
@@ -228,7 +228,7 @@ async def run_evaluation(req: EvaluationRequest):
                     iids.append(iid)
             inst_rows = load_instance_rows(iids, INSTANCES_PATH)
 
-            model_name = "evomas"
+            model_name = "opendraco"
             for raw in all_predictions:
                 try:
                     cand = json.loads(raw).get("model_name_or_path") or json.loads(raw).get("model")

@@ -6,7 +6,7 @@
  *   - A back-edge tells you "this graph has at least one cycle", but
  *     not how MANY distinct cycles there are. The topology stats panel
  *     wants the count, so it needs the proper enumeration.
- *   - For typical EvoMas topology configs (<= ~20 nodes) Johnson runs
+ *   - For typical OpenDraco topology configs (<= ~20 nodes) Johnson runs
  *     in microseconds; the O(V * E * C) complexity (C = number of
  *     cycles) is fine at this scale. We don't need to ship a more
  *     optimized algorithm.

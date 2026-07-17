@@ -29,7 +29,7 @@ from api.routers import (
     topology as topology_router,
 )
 
-app = FastAPI(title="EvoMas API", version="1.0.0")
+app = FastAPI(title="OpenDraco API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200"],

@@ -27,15 +27,15 @@ if [ -f "$ENV_FILE" ]; then
     done < "$ENV_FILE"
 fi
 
-# Venv installed by install.sh to `~/.evomas-venv` (in the user's home so
+# Venv installed by install.sh to `~/.opendraco-venv` (in the user's home so
 # the repo stays free of build artefacts).
-VENV_DIR="$HOME/.evomas-venv"
+VENV_DIR="$HOME/.opendraco-venv"
 UVICORN="$VENV_DIR/bin/uvicorn"
 if [ ! -x "$UVICORN" ]; then
     echo "[start_api] uvicorn not found at $UVICORN -- run ./install.sh first." >&2
     exit 1
 fi
-echo "Starting EvoMas API server on http://${API_HOST}:${API_PORT}"
+echo "Starting OpenDraco API server on http://${API_HOST}:${API_PORT}"
 # --app-dir points at the repo root (not api/) so `from api import common`
 # inside api/server.py finds the `api` package on sys.path.
 exec "$UVICORN" --app-dir "$REPO_ROOT" api.server:app \

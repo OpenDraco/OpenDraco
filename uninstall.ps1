@@ -2,19 +2,19 @@ $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
 
 # Reverse of install.ps1 (Windows). Removes the artefacts install.ps1 creates:
-# the ~\.evomas-venv, the `evomas` function in your $PROFILE, the 'evomas'
+# the ~\.opendraco-venv, the `opendraco` function in your $PROFILE, the 'opendraco'
 # Jupyter kernel, and app\node_modules. Your data is left alone by default --
 # pass --purge to ALSO delete the SWE-bench clone and the .env files (which
 # hold your API keys). Idempotent: safe to re-run, no-ops on anything gone.
 
 $RepoRoot = $PSScriptRoot
 # Same path install.ps1 / start_api.ps1 / run_tests.py use.
-$VenvDir      = Join-Path $HOME ".evomas-venv"
-$PythonEvomas = Join-Path $VenvDir "Scripts\python.exe"
+$VenvDir      = Join-Path $HOME ".opendraco-venv"
+$PythonOpendraco = Join-Path $VenvDir "Scripts\python.exe"
 
 # Markers install.ps1 wraps its profile function in (kept in sync).
-$Marker    = "# >>> evomas-cli >>>"
-$EndMarker = "# <<< evomas-cli <<<"
+$Marker    = "# >>> opendraco-cli >>>"
+$EndMarker = "# <<< opendraco-cli <<<"
 
 # Delete a directory tree, returning $true/$false instead of throwing so a
 # locked file (e.g. python.exe held by a live process) doesn't abort the whole
@@ -48,7 +48,7 @@ foreach ($arg in $args) {
         default {
             if ($arg -in @("-h", "--help", "-Help")) {
                 Write-Host "Usage: .\uninstall.ps1 [--purge]"
-                Write-Host "  --purge   also remove the SWE-bench\ clone and evomas\.env + api\.env (secrets!)"
+                Write-Host "  --purge   also remove the SWE-bench\ clone and opendraco\.env + api\.env (secrets!)"
                 exit 0
             }
             Write-Host "[uninstall] unknown arg: $arg (try --help)" -ForegroundColor Red
@@ -64,22 +64,22 @@ foreach ($arg in $args) {
 # $ErrorActionPreference = "Stop", the native command's stderr routed through
 # `2>&1` would otherwise surface as a terminating NativeCommandError and abort
 # the whole uninstall. Missing kernel/jupyter is a no-op, not a failure.
-if (Test-Path $PythonEvomas) {
-    Write-Host "[uninstall] removing 'evomas' Jupyter kernel" -ForegroundColor Cyan
+if (Test-Path $PythonOpendraco) {
+    Write-Host "[uninstall] removing 'opendraco' Jupyter kernel" -ForegroundColor Cyan
     try {
-        & $PythonEvomas -m jupyter kernelspec remove -f evomas 2>&1 | Out-Null
+        & $PythonOpendraco -m jupyter kernelspec remove -f opendraco 2>&1 | Out-Null
     } catch {
         Write-Host "[uninstall] (kernel not registered or jupyter unavailable -- skipping)" -ForegroundColor Cyan
     }
 }
 
-# --- 2. Strip the evomas function block from the PowerShell profile ----------
+# --- 2. Strip the opendraco function block from the PowerShell profile ----------
 # Same regex install.ps1 uses to refresh the block, applied here to delete it.
 $ProfilePath = $PROFILE
 if (Test-Path $ProfilePath) {
     $existing = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
     if ($existing -and $existing.Contains($Marker)) {
-        Write-Host "[uninstall] removing evomas function from $ProfilePath" -ForegroundColor Cyan
+        Write-Host "[uninstall] removing opendraco function from $ProfilePath" -ForegroundColor Cyan
         $pattern = "(?ms)" + [regex]::Escape($Marker) + ".*?" + [regex]::Escape($EndMarker)
         $existing = [regex]::Replace($existing, $pattern, "").TrimEnd()
         if ($existing) { $existing += "`r`n" }
@@ -88,7 +88,7 @@ if (Test-Path $ProfilePath) {
         try {
             Set-Content -Path $ProfilePath -Value $existing -Encoding utf8 -ErrorAction Stop
         } catch {
-            Write-Host "[uninstall] could not rewrite $ProfilePath -- remove the evomas function block by hand." -ForegroundColor Yellow
+            Write-Host "[uninstall] could not rewrite $ProfilePath -- remove the opendraco function block by hand." -ForegroundColor Yellow
         }
     }
 }
@@ -105,7 +105,7 @@ if (Test-Path $VenvDir) {
     Write-Host "[uninstall] removing venv at $VenvDir" -ForegroundColor Cyan
     if (-not (Remove-Tree $VenvDir)) {
         Write-Host "[uninstall] the venv is still in use. Close anything running its Python --" -ForegroundColor Yellow
-        Write-Host "            a VSCode/Jupyter 'Python 3 (EvoMas)' kernel, a running 'evomas api'," -ForegroundColor Yellow
+        Write-Host "            a VSCode/Jupyter 'Python 3 (OpenDraco)' kernel, a running 'opendraco api'," -ForegroundColor Yellow
         Write-Host "            or an activated venv shell -- then re-run .\uninstall.ps1." -ForegroundColor Yellow
     }
 } else {
@@ -126,7 +126,7 @@ if ($Purge) {
             Write-Host "            Remove it from WSL: wsl -- rm -rf '$($SwebenchDir -replace '\\','/')'"
         }
     }
-    foreach ($envFile in @((Join-Path $RepoRoot "evomas\.env"), (Join-Path $RepoRoot "api\.env"))) {
+    foreach ($envFile in @((Join-Path $RepoRoot "opendraco\.env"), (Join-Path $RepoRoot "api\.env"))) {
         if (Test-Path $envFile) {
             Write-Host "[uninstall] --purge: removing $envFile (held your secrets)" -ForegroundColor Yellow
             try {
@@ -141,5 +141,5 @@ if ($Purge) {
 }
 
 Write-Host ""
-Write-Host "[uninstall] done. Open a fresh PowerShell window so the removed evomas" -ForegroundColor Green
+Write-Host "[uninstall] done. Open a fresh PowerShell window so the removed opendraco" -ForegroundColor Green
 Write-Host "            function clears from your current session."

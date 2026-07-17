@@ -17,7 +17,7 @@ concurrency:
 env:
   PUBLIC_REPO: xiangfengyepan/TFG_public
   PUBLIC_BRANCH: main
-  PUBLIC_SUBDIR: EvoMas-master
+  PUBLIC_SUBDIR: OpenDraco-master
 
 jobs:
   mirror:
@@ -48,16 +48,16 @@ jobs:
             --exclude='/notebook-*.ipynb' \
             --exclude='/swebench_*.jsonl' \
             --exclude='/custom_instances.jsonl' \
-            --exclude='/evomas.egg-info/' \
-            --exclude='evomas/config/loaded/' \
-            --exclude='evomas/venv/' \
+            --exclude='/opendraco.egg-info/' \
+            --exclude='opendraco/config/loaded/' \
+            --exclude='opendraco/venv/' \
             --exclude='**/__pycache__/' \
             --exclude='**/node_modules/' \
             --exclude='app/dist/' \
             ./ "$STAGE/"
           echo "STAGE=$STAGE" >> "$GITHUB_ENV"
 
-      - name: Update EvoMas-master subdir in public repo
+      - name: Update OpenDraco-master subdir in public repo
         env:
           MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
           MSG: ${{ github.event.inputs.message || format('release {0}', github.ref_name) }}
@@ -68,9 +68,9 @@ jobs:
             "https://x-access-token:${MIRROR_TOKEN}@github.com/${PUBLIC_REPO}.git" \
             "$PUBLIC"
           cd "$PUBLIC"
-          git config user.name  "evomas-mirror[bot]"
-          git config user.email "evomas-mirror@users.noreply.github.com"
-          # Replace the EvoMas-master/ subtree with the staged snapshot.
+          git config user.name  "opendraco-mirror[bot]"
+          git config user.email "opendraco-mirror@users.noreply.github.com"
+          # Replace the OpenDraco-master/ subtree with the staged snapshot.
           # rsync --delete prunes files that no longer exist in source, scoped
           # to this subdir only — sibling folders (First_Part_Analysis/,
           # framework-master/, LICENSE.txt, README.md) are left untouched.

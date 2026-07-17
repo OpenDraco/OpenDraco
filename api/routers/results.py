@@ -24,9 +24,9 @@ from api.common import (
     RESULTS_DIR,
     safe_under,
 )
-from evomas.utils.instances import instance_memberships
-from evomas.utils.notebook import build_notebook_for_prediction
-from evomas.utils.predictions import (
+from opendraco.utils.instances import instance_memberships
+from opendraco.utils.notebook import build_notebook_for_prediction
+from opendraco.utils.predictions import (
     expand_hierarchy,
     pair_runs,
     scan_evaluations,
@@ -152,7 +152,7 @@ def get_prediction_config(path: str) -> dict[str, Any]:
 @router.get("/api/results/prediction/notebook")
 def get_prediction_notebook(path: str, evaluator: str = "") -> Response:
     """Reproduce-this-run Jupyter notebook (.ipynb) for a prediction JSONL.
-    Thin HTTP wrapper around `evomas.utils.notebook.build_notebook_for_prediction`;
+    Thin HTTP wrapper around `opendraco.utils.notebook.build_notebook_for_prediction`;
     passes the api-side config/instances paths so the env-overrideable
     `RESULTS_DIR` is honored. `evaluator` is the filename stem under
     `scripts/evaluation/` to bake into section 5 — required."""

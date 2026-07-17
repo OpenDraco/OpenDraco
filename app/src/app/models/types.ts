@@ -47,7 +47,7 @@ export interface AgentTool {
 
 export interface AgentBlock extends AgentConfig {
   class: string;
-  /** Palette key (e.g. `"evomas:Locator"`). Traceability only. */
+  /** Palette key (e.g. `"opendraco:Locator"`). Traceability only. */
   variant?: string;
   state?: StateField[];
   tools?: AgentTool[];
@@ -58,7 +58,7 @@ export interface AgentBlock extends AgentConfig {
  * the current RESULTS_DIR. Surfaced via `/api/paths` so the frontend's
  * user-facing strings (empty hints, tooltips, error messages) reflect
  * the actual values rather than the hardcoded defaults. */
-export interface EvomasPaths {
+export interface OpendracoPaths {
   base_dir: string;
   results_dir: string;
   predictions_dir: string;
@@ -76,7 +76,7 @@ export interface ToolDescriptor {
     required?: string[];
     [k: string]: unknown;
   };
-  /** Bundle folder under `evomas/tools/`, or `"evomas"` for top-level. */
+  /** Bundle folder under `opendraco/tools/`, or `"opendraco"` for top-level. */
   repo?: string;
 }
 
@@ -273,16 +273,16 @@ export interface AgentType {
   default_user: string;
   default_tools: string[];
   default_config: Record<string, unknown>;
-  /** EvoMas built-in first, then CSV-derived alternatives. */
+  /** OpenDraco built-in first, then CSV-derived alternatives. */
   variants?: AgentVariant[];
 }
 
-/** One variant of an AGENT_TYPE — EvoMas built-in or CSV-derived. */
+/** One variant of an AGENT_TYPE — OpenDraco built-in or CSV-derived. */
 export interface AgentVariant {
-  /** Drag payload (e.g. `"evomas:Locator"`). */
+  /** Drag payload (e.g. `"opendraco:Locator"`). */
   key: string;
   label: string;
-  /** `"evomas"` for built-ins; CSV stem otherwise. */
+  /** `"opendraco"` for built-ins; CSV stem otherwise. */
   repo: string;
   /** Upstream agent name. Equals AGENT_TYPE for built-ins. */
   name: string;

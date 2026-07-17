@@ -3,7 +3,7 @@
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $AppDir   = Join-Path $RepoRoot "app"
 
-# Self-heal: if a contributor invokes `evomas web` without running setup
+# Self-heal: if a contributor invokes `opendraco web` without running setup
 # first (or just `git pull`ed and forgot), `npx ng serve` will fetch the
 # wrong `ng` package from npmjs and exit with "could not determine
 # executable to run". Install local deps once if node_modules is absent.
@@ -32,13 +32,13 @@ if (Test-Path $apiServiceFile) {
     }
 }
 
-# Read API_PORT from .env (api/.env wins over evomas/.env). If the
+# Read API_PORT from .env (api/.env wins over opendraco/.env). If the
 # user bumped the port there, the frontend's baked URL (likely :8000)
 # won't follow -- surface that mismatch explicitly.
 $apiEnvFileFE    = Join-Path $RepoRoot "api\.env"
-$evomasEnvFileFE = Join-Path $RepoRoot "evomas\.env"
+$opendracoEnvFileFE = Join-Path $RepoRoot "opendraco\.env"
 $envApiPort = $null
-foreach ($f in @($evomasEnvFileFE, $apiEnvFileFE)) {
+foreach ($f in @($opendracoEnvFileFE, $apiEnvFileFE)) {
     if (-not (Test-Path $f)) { continue }
     foreach ($line in Get-Content $f) {
         $trim = $line.Trim()
@@ -82,7 +82,7 @@ if ($apiOk) {
     Write-Host ("  API /health      : OK ({0})" -f $probeUrl) -ForegroundColor Green
 } else {
     Write-Host ("  API /health      : UNREACHABLE at {0}" -f $probeUrl) -ForegroundColor Yellow
-    Write-Host ("                     start with 'evomas api' or check the port matches the baked URL.") -ForegroundColor Yellow
+    Write-Host ("                     start with 'opendraco api' or check the port matches the baked URL.") -ForegroundColor Yellow
 }
 Write-Host ""
 
@@ -127,7 +127,7 @@ if ($portPid) {
     }
 }
 
-Write-Host "Starting EvoMas Angular frontend on http://localhost:4200"
+Write-Host "Starting OpenDraco Angular frontend on http://localhost:4200"
 Push-Location $AppDir
 try {
     npx ng serve --open

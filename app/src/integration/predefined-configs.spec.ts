@@ -2,14 +2,14 @@
  * Matrix integration spec: every predefined config × every listed
  * instance runs through inference + evaluation, asserts
  * `report.resolved === true`. Adding a new config under
- * `evomas/config/predefined/` lights up coverage automatically.
+ * `opendraco/config/predefined/` lights up coverage automatically.
  *
  * Requires:
- *   - FastAPI server on EVOMAS_API_URL (default localhost:8000/api)
+ *   - FastAPI server on OPENDRACO_API_URL (default localhost:8000/api)
  *   - Ollama reachable + each config's model pulled
  *   - Every INSTANCES id present in `swebench_instances.jsonl`
  *
- * Opt-in: `EVOMAS_RUN_INTEGRATION=1 npx vitest run app/src/integration/`.
+ * Opt-in: `OPENDRACO_RUN_INTEGRATION=1 npx vitest run app/src/integration/`.
  */
 import { fileURLToPath } from 'node:url';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -18,17 +18,17 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { Agent } from 'undici';
 
 const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
-const RUN = env['EVOMAS_RUN_INTEGRATION'] === '1';
-const API = env['EVOMAS_API_URL'] ?? 'http://localhost:8000/api';
+const RUN = env['OPENDRACO_RUN_INTEGRATION'] === '1';
+const API = env['OPENDRACO_API_URL'] ?? 'http://localhost:8000/api';
 
 const SPEC_DIR = dirname(fileURLToPath(import.meta.url));
 
-/** Opt-in resume mode: set EVOMAS_RESUME_DIR=<results dir relative to repo
+/** Opt-in resume mode: set OPENDRACO_RESUME_DIR=<results dir relative to repo
  * root, e.g. experiments/results-7configs-23instances-litedev> to skip
  * cells whose (config, instance) already has a non-empty prediction file
  * in <dir>/predictions. Stalled (0-byte) predictions count as not-done.
  * Empty value = no skipping; every cell runs. */
-const _RESUME_DIR_REL = (env['EVOMAS_RESUME_DIR'] ?? '').trim();
+const _RESUME_DIR_REL = (env['OPENDRACO_RESUME_DIR'] ?? '').trim();
 const _DONE_PAIRS: Set<string> = (() => {
   if (!_RESUME_DIR_REL) return new Set();
   const predDir = resolve(SPEC_DIR, '../../..', _RESUME_DIR_REL, 'predictions');
@@ -54,7 +54,7 @@ const _DONE_PAIRS: Set<string> = (() => {
 })();
 /** Configs that run in this matrix. Edit this literal to flip the target
  * — no env vars to set, no ng-test arg forwarding to fight. Each entry
- * must correspond to a file at `evomas/config/predefined/<name>.json`. */
+ * must correspond to a file at `opendraco/config/predefined/<name>.json`. */
 const CONFIGS: string[] = ['hyperagent_star'];
 
 interface Instance { id: string; hint?: string }
@@ -226,7 +226,7 @@ describe.skip('integration · predefined configs', () => {
     } catch (err) {
       throw new Error(
         `Integration matrix requires the FastAPI server on ${API}. `
-        + `Start it with \`evomas api\` and re-run. Original error: ${(err as Error).message}`,
+        + `Start it with \`opendraco api\` and re-run. Original error: ${(err as Error).message}`,
       );
     }
   });
@@ -235,7 +235,7 @@ describe.skip('integration · predefined configs', () => {
     describe(config, () => {
       for (const inst of INSTANCES) {
         // Resume mode: skip cells that already have a non-empty
-        // prediction in the EVOMAS_RESUME_DIR snapshot taken at module
+        // prediction in the OPENDRACO_RESUME_DIR snapshot taken at module
         // init. Cells with 0-byte predictions are NOT in the set and
         // therefore re-run, which is the whole point of the flag.
         const alreadyDone = _DONE_PAIRS.has(`${config}::${inst.id}`);

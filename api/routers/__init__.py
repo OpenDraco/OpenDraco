@@ -1,4 +1,4 @@
-"""Per-page FastAPI routers for the EvoMas API.
+"""Per-page FastAPI routers for the OpenDraco API.
 
 Each module here defines a `router = APIRouter()` and decorates its
 endpoints with full `/api/...` paths (no prefix), so URLs stay

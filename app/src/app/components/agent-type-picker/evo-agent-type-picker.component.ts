@@ -7,8 +7,8 @@ import { AgentVariant } from '../../models/types';
 /**
  * Topology palette chip: one colored, draggable chip per canonical AGENT_TYPE
  * (Locator, Patcher, ...). A small caret opens a dropdown listing every
- * available variant for that type -- the EvoMas built-in (always first) plus
- * every CSV-derived alternative from `evomas/config/agent_types/*.json`.
+ * available variant for that type -- the OpenDraco built-in (always first) plus
+ * every CSV-derived alternative from `opendraco/config/agent_types/*.json`.
  *
  * Selecting a variant updates the chip's label and the drag payload so a
  * fresh node lands with that variant's prompts / tools / config instead of
@@ -18,7 +18,7 @@ import { AgentVariant } from '../../models/types';
  *   dataTransfer.setData('agent-type',    <canonical AGENT_TYPE>)
  *   dataTransfer.setData('agent-variant', <variant.key>)
  * The Topology component's `onGraphDrop` reads both. Older drags (legacy
- * `agent-type` only) still work -- they fall back to the EvoMas built-in.
+ * `agent-type` only) still work -- they fall back to the OpenDraco built-in.
  */
 @Component({
   selector: 'evo-agent-type-picker',
@@ -57,13 +57,13 @@ export class EvoAgentTypePickerComponent {
     return this.variants.find(v => v.key === k) ?? this.variants[0];
   }
 
-  /** Display label inside the chip. Built-in EvoMas variants ("EvoMas ·
+  /** Display label inside the chip. Built-in OpenDraco variants ("OpenDraco ·
    * default") render as just the AGENT_TYPE so the chip stays compact;
    * repo variants show "<repo> · <name>" verbatim. */
   get chipLabel(): string {
     const v = this.selectedVariant;
     if (!v) return this.agentType;
-    if (v.repo === 'evomas') return this.agentType;
+    if (v.repo === 'opendraco') return this.agentType;
     return v.label;
   }
 
@@ -95,7 +95,7 @@ export class EvoAgentTypePickerComponent {
   onDragStart(ev: DragEvent): void {
     if (!this.draggable) return;
     const v = this.selectedVariant;
-    const variantKey = v?.key ?? `evomas:${this.agentType}`;
+    const variantKey = v?.key ?? `opendraco:${this.agentType}`;
     ev.dataTransfer?.setData('agent-type', this.agentType);
     ev.dataTransfer?.setData('agent-variant', variantKey);
     if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'copy';

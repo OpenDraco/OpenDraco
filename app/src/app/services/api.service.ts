@@ -5,7 +5,7 @@ import {
   UnifiedConfig, ConfigSummary, Instance, InferenceEvent, EvalEvent,
   ResultInstance, ResultPrediction, ResultEvaluation, ToolDescriptor,
   AgentType, AgentVariant, PredictionInspection, OllamaModel,
-  ConfigHistoryEntry, ConfigRunMatch, EvomasPaths,
+  ConfigHistoryEntry, ConfigRunMatch, OpendracoPaths,
 } from '../models/types';
 
 const BASE = 'http://localhost:8000/api';
@@ -22,10 +22,10 @@ export class ApiService {
   /** Resolved on-disk paths the backend uses for the current RESULTS_DIR.
    * Used by user-facing strings (Evaluation page empty hint, file-picker
    * tooltips, "log lives under …" hints) so the displayed path tracks
-   * whatever the user set in `evomas/.env` / `api/.env` instead of the
+   * whatever the user set in `opendraco/.env` / `api/.env` instead of the
    * legacy `results/` literal. Returned as repo-relative POSIX strings. */
-  getPaths(): Observable<EvomasPaths> {
-    return this.http.get<EvomasPaths>(`${BASE}/paths`);
+  getPaths(): Observable<OpendracoPaths> {
+    return this.http.get<OpendracoPaths>(`${BASE}/paths`);
   }
 
   /** `host:port` portion of BASE. */
@@ -49,7 +49,7 @@ export class ApiService {
   }
 
   /** Variants flat-keyed by AGENT_TYPE. First entry per bucket is the
-   * EvoMas built-in (Topology dropdown default). */
+   * OpenDraco built-in (Topology dropdown default). */
   getAgentVariants(): Observable<Record<string, AgentVariant[]>> {
     return this.http.get<Record<string, AgentVariant[]>>(`${BASE}/agent-variants`);
   }

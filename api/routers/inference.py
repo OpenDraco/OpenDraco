@@ -29,9 +29,9 @@ from api.common import (
     safe_under,
     logger,
 )
-from evomas.config.loader import resolve_config_path
-from evomas.utils.json_safe import safe_serialize
-from evomas.utils.notebook import build_notebook_for_inputs
+from opendraco.config.loader import resolve_config_path
+from opendraco.utils.json_safe import safe_serialize
+from opendraco.utils.notebook import build_notebook_for_inputs
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ class InferenceRequest(BaseModel):
     # Multi-instance form — worker runs sequentially with
     # `instance_start` / `instance_done` framing on the SSE stream.
     instance_ids: list[str] | None = None
-    # Config name (resolved to evomas/config/<name>.json) OR an inline
+    # Config name (resolved to opendraco/config/<name>.json) OR an inline
     # unified-config dict (topology page's "Save to session" flow).
     config: str | dict[str, Any] = ""
 
@@ -106,15 +106,15 @@ async def run_inference(req: InferenceRequest):
     def worker() -> None:
         global _active_run
         try:
-            from evomas.config.loader import load_config
-            from evomas.core.workflow.graph_builder import build_graph
-            from evomas.core.workflow.runner import _build_agents
-            from evomas.core.workflow.state_factory import (
+            from opendraco.config.loader import load_config
+            from opendraco.core.workflow.graph_builder import build_graph
+            from opendraco.core.workflow.runner import _build_agents
+            from opendraco.core.workflow.state_factory import (
                 build_initial_state,
                 build_state_class,
             )
-            from evomas.utils.patch import generate_diff_impl
-            from evomas.utils.workspace import clone_workspace
+            from opendraco.utils.patch import generate_diff_impl
+            from opendraco.utils.workspace import clone_workspace
 
             if isinstance(req.config, dict):
                 put({"type": "status", "message": "Using inline session config…"})
@@ -152,7 +152,7 @@ async def run_inference(req: InferenceRequest):
             # `run_meta` is the NDJSON header — config name + git SHA so the
             # History panel can resolve "runs that used this version".
             try:
-                from evomas.config.history import current_sha as _current_sha
+                from opendraco.config.history import current_sha as _current_sha
                 _config_sha = _current_sha(config_name) if not isinstance(req.config, dict) else None
             except Exception:  # noqa: BLE001
                 _config_sha = None
@@ -168,11 +168,11 @@ async def run_inference(req: InferenceRequest):
             # Preflight: pull any referenced Ollama models that aren't on
             # disk yet. Progress events route through put() → SSE so the
             # log panel renders live progress.
-            from evomas.exceptions.errors import EvomasError as _EvomasError
-            from evomas.utils.ollama_preflight import preflight_models
+            from opendraco.exceptions.errors import OpendracoError as _OpendracoError
+            from opendraco.utils.ollama_preflight import preflight_models
             try:
                 preflight_models(cfg, event_sink=put)
-            except _EvomasError as exc:
+            except _OpendracoError as exc:
                 put({"type": "error", "message": str(exc)})
                 return
 
@@ -267,7 +267,7 @@ async def run_inference(req: InferenceRequest):
                 )
                 # Sandboxed tools (write_file, ...) read this env var.
                 import os as _os
-                _os.environ["EVOMAS_WORKSPACE_PATH"] = str(workspace.path)
+                _os.environ["OPENDRACO_WORKSPACE_PATH"] = str(workspace.path)
 
                 issue_parts: list[str] = []
                 if instance.get("problem_statement"):
@@ -360,7 +360,7 @@ async def run_inference(req: InferenceRequest):
                         # the whole delta when the agent wrote elsewhere.
                         targets_for_node = successors.get(agent_name, [])
                         if targets_for_node:
-                            from evomas.utils.handoff import (
+                            from opendraco.utils.handoff import (
                                 preview_payload as _preview_payload,
                                 summarize_payload as _summarize_payload,
                             )
@@ -419,7 +419,7 @@ async def run_inference(req: InferenceRequest):
                 pred = {
                     "instance_id": iid,
                     "model_patch": final_patch,
-                    "model_name_or_path": "evomas",
+                    "model_name_or_path": "opendraco",
                     "run_id": run_id,
                     "tokens": {"input": tokens_in, "output": tokens_out, "total": tokens_total},
                     # Forward subset/split so the Evaluation page can partition.
@@ -520,7 +520,7 @@ def build_inference_notebook(req: NotebookRequest) -> Response:
     the notebook omits the compare-with-original section.
 
     Accepts either a config name (resolved against
-    `evomas/config/predefined|loaded/`) or an inline unified-config dict
+    `opendraco/config/predefined|loaded/`) or an inline unified-config dict
     (the topology page's "Save to session" payload)."""
     if not req.instance_ids:
         raise HTTPException(400, "instance_ids must be non-empty")

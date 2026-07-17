@@ -227,7 +227,7 @@ def main() -> int:
     ap.add_argument("--predictions", required=True, help="Predictions JSONL path.")
     ap.add_argument("--report-dir", required=True, help="Where to drop the SWE-bench-shaped report tree.")
     ap.add_argument("--run-id", required=True, help="Run identifier (e.g. notebook-translate-custom).")
-    ap.add_argument("--model", default="evomas-translate", help="Model label baked into report filenames.")
+    ap.add_argument("--model", default="opendraco-translate", help="Model label baked into report filenames.")
     ap.add_argument("--threshold", type=float, default=50.0,
                     help="Corpus-BLEU resolved threshold (0-100; sacrebleu scale). Default 50.")
     ap.add_argument("--workdir", default=None,

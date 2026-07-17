@@ -3,7 +3,7 @@
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 $apiEnvFile    = Join-Path $RepoRoot "api\.env"
-$evomasEnvFile = Join-Path $RepoRoot "evomas\.env"
+$opendracoEnvFile = Join-Path $RepoRoot "opendraco\.env"
 $apiHost = "0.0.0.0"
 $apiPort = "8000"
 
@@ -38,26 +38,26 @@ function Format-EnvValue {
 }
 
 # Print both .env files plus a "Effective" column showing which value
-# wins after `load_dotenv(override=False)` runs in evomas/paths.py —
+# wins after `load_dotenv(override=False)` runs in opendraco/paths.py —
 # shell-set env vars take precedence over .env values, so a stale
 # `$env:RESULTS_DIR=...` in the launching shell quietly beats the file.
-$evomasEnv = Read-EnvFile $evomasEnvFile
+$opendracoEnv = Read-EnvFile $opendracoEnvFile
 $apiEnv    = Read-EnvFile $apiEnvFile
 
 # Surface API_HOST/API_PORT for the uvicorn launch line. api/.env wins
-# over evomas/.env on collisions, matching the python-side merge order.
+# over opendraco/.env on collisions, matching the python-side merge order.
 if ($apiEnv.Contains("API_HOST")) { $apiHost = $apiEnv["API_HOST"] }
-elseif ($evomasEnv.Contains("API_HOST")) { $apiHost = $evomasEnv["API_HOST"] }
+elseif ($opendracoEnv.Contains("API_HOST")) { $apiHost = $opendracoEnv["API_HOST"] }
 if ($apiEnv.Contains("API_PORT")) { $apiPort = $apiEnv["API_PORT"] }
-elseif ($evomasEnv.Contains("API_PORT")) { $apiPort = $evomasEnv["API_PORT"] }
+elseif ($opendracoEnv.Contains("API_PORT")) { $apiPort = $opendracoEnv["API_PORT"] }
 
 Write-Host ""
-Write-Host "=== Env from evomas/.env ===" -ForegroundColor Cyan
-if ($evomasEnv.Count -eq 0) {
+Write-Host "=== Env from opendraco/.env ===" -ForegroundColor Cyan
+if ($opendracoEnv.Count -eq 0) {
     Write-Host "  (file missing or empty)"
 } else {
-    foreach ($k in $evomasEnv.Keys) {
-        Write-Host ("  {0,-26} = {1}" -f $k, (Format-EnvValue -Key $k -Value $evomasEnv[$k]))
+    foreach ($k in $opendracoEnv.Keys) {
+        Write-Host ("  {0,-26} = {1}" -f $k, (Format-EnvValue -Key $k -Value $opendracoEnv[$k]))
     }
 }
 
@@ -73,16 +73,16 @@ if ($apiEnv.Count -eq 0) {
 
 Write-Host ""
 Write-Host "=== Effective in this shell (shell env wins over .env via override=False) ===" -ForegroundColor Cyan
-$allKeys = @($evomasEnv.Keys + $apiEnv.Keys) | Sort-Object -Unique
+$allKeys = @($opendracoEnv.Keys + $apiEnv.Keys) | Sort-Object -Unique
 foreach ($k in $allKeys) {
     $shellVal = [System.Environment]::GetEnvironmentVariable($k, "Process")
-    # api/.env wins over evomas/.env on collisions (matches the
-    # python-dotenv load order in evomas/paths.py).
-    $envVal = if ($apiEnv.Contains($k)) { $apiEnv[$k] } else { $evomasEnv[$k] }
-    $envSrc = if ($apiEnv.Contains($k)) { "api/.env" } else { "evomas/.env" }
+    # api/.env wins over opendraco/.env on collisions (matches the
+    # python-dotenv load order in opendraco/paths.py).
+    $envVal = if ($apiEnv.Contains($k)) { $apiEnv[$k] } else { $opendracoEnv[$k] }
+    $envSrc = if ($apiEnv.Contains($k)) { "api/.env" } else { "opendraco/.env" }
 
     # Only flag a genuine override: shell value present AND different
-    # from the .env value. The `evomas` CLI imports evomas.paths
+    # from the .env value. The `opendraco` CLI imports opendraco.paths
     # (which eagerly load_dotenv()'s) before spawning this script, so
     # every .env key is already in the process env by the time we
     # inspect it — that's not a real override and shouldn't warn.
@@ -102,9 +102,9 @@ foreach ($k in $allKeys) {
 }
 Write-Host ""
 
-# Venv installed by install.ps1 to `~\.evomas-venv` (in the user's home so
+# Venv installed by install.ps1 to `~\.opendraco-venv` (in the user's home so
 # the repo stays free of build artefacts).
-$VenvDir = Join-Path $HOME ".evomas-venv"
+$VenvDir = Join-Path $HOME ".opendraco-venv"
 $Uvicorn = Join-Path $VenvDir "Scripts\uvicorn.exe"
 if (-not (Test-Path $Uvicorn)) {
     Write-Host "[start_api] uvicorn not found at $Uvicorn -- run install.ps1 first." -ForegroundColor Red
@@ -153,7 +153,7 @@ if ($portPid) {
         exit 0
     }
 }
-Write-Host "Starting EvoMas API server on http://$($apiHost):$($apiPort)"
+Write-Host "Starting OpenDraco API server on http://$($apiHost):$($apiPort)"
 # --app-dir points at the repo root (not api\) so `from api import common`
 # inside api\server.py finds the `api` package on sys.path.
 & $Uvicorn --app-dir "$RepoRoot" api.server:app --host $apiHost --port $apiPort --reload

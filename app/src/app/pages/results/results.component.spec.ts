@@ -33,7 +33,7 @@ function makeResults(
       predictions_dir: 'results/predictions',
       predictions_logs_dir: 'results/predictions/logs',
       evaluations_dir: 'results/evaluations',
-      inference_logs_dir: 'evomas/logs/inference_logs',
+      inference_logs_dir: 'opendraco/logs/inference_logs',
     })),
   } as unknown as ApiService;
   const state = new ResultsStateService();
@@ -213,14 +213,14 @@ describe('ResultsComponent deep-link reveal', () => {
       // instance + its first run, which is the wrong result for a
       // stale deep-link.
       const instances = [
-        mkInstance('custom-xiangfengyepan-evomas-test-instance-fcf59bc', [
+        mkInstance('custom-xiangfengyepan-opendraco-test-instance-fcf59bc', [
           { run_id: 'star-deadbeef' },
         ]),
       ];
       const { app, state, revealSpy } = makeResults(
         {
           runId: 'chain2-d7fd42ff',
-          instanceId: 'custom-xiangfengyepan-evomas-test-instance-fcf59bc',
+          instanceId: 'custom-xiangfengyepan-opendraco-test-instance-fcf59bc',
         },
         instances,
       );

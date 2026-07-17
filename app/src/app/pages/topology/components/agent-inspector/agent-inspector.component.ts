@@ -150,10 +150,10 @@ export class AgentInspectorComponent {
   }
 
   // ── Prompt + tool param helpers (pure on inputs) ───────────────
-  /** True when the active node was seeded from a non-EvoMas variant. */
+  /** True when the active node was seeded from a non-OpenDraco variant. */
   private get blockHasRepoVariant(): boolean {
     const v = this.agentBlock?.variant;
-    return !!v && !v.startsWith('evomas:');
+    return !!v && !v.startsWith('opendraco:');
   }
 
   getPrompt(slot: 'system' | 'user' | 'proxy'): string {

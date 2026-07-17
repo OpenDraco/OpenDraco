@@ -6,6 +6,6 @@ JSONL and emit per-instance verdicts in SWE-bench-shaped report files.
 - `run_swebench_evaluation_remote.py` — remote sb-cli wrapper (no Docker).
 - `translate_eval.py`              — translation-task BLEU evaluator (vs `<file>.gold` sidecars).
 
-Wrapped by `evomas` CLI commands (`evomas run evaluation`, `evomas apply`)
-which dispatch via `evomas.cli._run_script("evaluation/<name>.py", ...)`.
+Wrapped by `opendraco` CLI commands (`opendraco run evaluation`, `opendraco apply`)
+which dispatch via `opendraco.cli._run_script("evaluation/<name>.py", ...)`.
 """

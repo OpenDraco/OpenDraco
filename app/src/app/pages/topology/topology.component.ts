@@ -25,10 +25,10 @@ import {
 } from './components/index';
 
 /** Owner for tools without a `repo` field. */
-const FALLBACK_REPO = 'evomas';
+const FALLBACK_REPO = 'opendraco';
 
-/** Pin `evomas` first in the "Add tool" dropdown; the rest alphabetical. */
-const REPO_GROUP_ORDER: readonly string[] = ['evomas'];
+/** Pin `opendraco` first in the "Add tool" dropdown; the rest alphabetical. */
+const REPO_GROUP_ORDER: readonly string[] = ['opendraco'];
 
 /** Virtual flow-boundary node ids; never appear in the serialized config. */
 const START_NODE_ID = '__START__';
@@ -487,7 +487,7 @@ export class TopologyComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.isPredefined(stem)) return;
     const ok = await this.dialog.confirm({
       title: 'Delete config',
-      message: `Delete loaded config "${stem}"? This removes the file from evomas/config/loaded/.`,
+      message: `Delete loaded config "${stem}"? This removes the file from opendraco/config/loaded/.`,
       okLabel: 'Delete',
       danger: true,
     });
@@ -548,7 +548,7 @@ export class TopologyComponent implements OnInit, AfterViewInit, OnDestroy {
     const e = this.edgeCount;
     const c = this.cycleCount;
     return `${a} agent${a === 1 ? '' : 's'}, ${e} edge${e === 1 ? '' : 's'}, `
-      + `${c} simple cycle${c === 1 ? '' : 's'} (${this.isDag ? 'DAG — topological order exists' : 'cycles allowed at runtime — capped by EVOMAS_GRAPH_MAX_REVISITS'})`;
+      + `${c} simple cycle${c === 1 ? '' : 's'} (${this.isDag ? 'DAG — topological order exists' : 'cycles allowed at runtime — capped by OPENDRACO_GRAPH_MAX_REVISITS'})`;
   }
 
   /** Build model dropdown options. Current model is always present and
@@ -597,7 +597,7 @@ export class TopologyComponent implements OnInit, AfterViewInit, OnDestroy {
     return 'ollama';
   }
 
-  /** Whether the current provider honors `knob` — mirrors `evomas/models/`. */
+  /** Whether the current provider honors `knob` — mirrors `opendraco/models/`. */
   supportsKnob(knob: string): boolean {
     const p = this.providerOf(this.agentBlock?.model);
     if (p === 'ollama') return true;
@@ -1511,10 +1511,10 @@ export class TopologyComponent implements OnInit, AfterViewInit, OnDestroy {
     const taken = new Set(Object.keys(this.currentConfig.agents));
     // Repo-prefixed id; collisions get `_<n>` via suggestNodeId.
     let base: string;
-    if (variant && variant.repo !== 'evomas') {
+    if (variant && variant.repo !== 'opendraco') {
       base = `${normalizeNodeBase(variant.repo)}_${normalizeNodeBase(variant.name || type)}`;
     } else {
-      base = `evomas_${normalizeNodeBase(type)}`;
+      base = `opendraco_${normalizeNodeBase(type)}`;
     }
     if (!base) base = normalizeNodeBase(type) || 'agent';
     const id = taken.has(base) ? suggestNodeId(base, taken) : base;
@@ -1545,11 +1545,11 @@ export class TopologyComponent implements OnInit, AfterViewInit, OnDestroy {
     const meta = this.agentTypes.find(t => t.type === type);
     const cfg = (meta?.default_config ?? {}) as Record<string, unknown>;
     // Repo variants override prompts + tools; config knobs stay from the type.
-    const useVariant = variant && variant.repo !== 'evomas';
+    const useVariant = variant && variant.repo !== 'opendraco';
     const variantTools = useVariant ? (variant?.default_tools ?? []) : (meta?.default_tools ?? []);
     const block: AgentBlock = {
       class: type,
-      variant: variant?.key ?? `evomas:${type}`,
+      variant: variant?.key ?? `opendraco:${type}`,
       // Defaults mirror the AgentConfig pydantic schema.
       model:          (cfg['model']          as string)  ?? 'qwen3.5:9b',
       think:          (cfg['think']          as boolean) ?? true,
@@ -1634,7 +1634,7 @@ export class TopologyComponent implements OnInit, AfterViewInit, OnDestroy {
     this.pushUndoSnapshot();
 
     const variant = meta.variants?.find(v => v.key === block.variant);
-    const useVariant = !!variant && variant.repo !== 'evomas';
+    const useVariant = !!variant && variant.repo !== 'opendraco';
     const defaults = useVariant ? (variant?.default_tools ?? []) : (meta.default_tools ?? []);
     block.tools = defaults.map(name => ({ name, params: {} }));
     this.toolParamsDraft = {};
@@ -1699,7 +1699,7 @@ export class TopologyComponent implements OnInit, AfterViewInit, OnDestroy {
     const ok = await this.dialog.confirm({
       title: 'Save to disk',
       message:
-        `Overwrite evomas/config/loaded/${this.currentConfigName}.json ` +
+        `Overwrite opendraco/config/loaded/${this.currentConfigName}.json ` +
         `with the current edits? The previous file will be gone.`,
       okLabel: 'Save',
     });
@@ -1739,13 +1739,13 @@ export class TopologyComponent implements OnInit, AfterViewInit, OnDestroy {
   toolParamsDraft: Record<number, string> = {};
   toolParamsError: Record<number, string> = {};
 
-  /** True when the active node was seeded from a non-EvoMas variant. In
+  /** True when the active node was seeded from a non-OpenDraco variant. In
    * that case the type's built-in defaults must NOT leak in as a fallback:
    * an empty `prompts.system` or `tools` array means the variant explicitly
-   * has no value for that slot, not "fall back to the EvoMas built-in". */
+   * has no value for that slot, not "fall back to the OpenDraco built-in". */
   private get blockHasRepoVariant(): boolean {
     const v = this.agentBlock?.variant;
-    return !!v && !v.startsWith('evomas:');
+    return !!v && !v.startsWith('opendraco:');
   }
 
   get currentTools(): AgentTool[] {
@@ -1753,9 +1753,9 @@ export class TopologyComponent implements OnInit, AfterViewInit, OnDestroy {
     // When the JSON block doesn't carry an explicit `tools` array, surface
     // the appropriate default list as a read-only preview. The first
     // add/remove call materializes them into the block so subsequent edits
-    // behave the way they always have. For non-EvoMas variants the default
+    // behave the way they always have. For non-OpenDraco variants the default
     // list is the variant's catalog tools (matches the backend's
-    // `resolve_variant_block` injection); for EvoMas variants and the
+    // `resolve_variant_block` injection); for OpenDraco variants and the
     // no-variant path it's the type's DEFAULT_TOOLS.
     if (this.agentBlock.tools && this.agentBlock.tools.length > 0) {
       return this.agentBlock.tools;

@@ -21,19 +21,19 @@ from api.common import (
     PREDEFINED_CONFIG_DIR,
     logger,
 )
-from evomas.config.loader import (
+from opendraco.config.loader import (
     resolve_config_path,
     scan_config_dir,
     validate_loaded_config,
 )
-from evomas.exceptions.errors import ConfigError
-from evomas.mcp.server import tool_repo_owner_map
-from evomas.utils.ollama_preflight import pulled_ollama_models_with_catalog
+from opendraco.exceptions.errors import ConfigError
+from opendraco.mcp.server import tool_repo_owner_map
+from opendraco.utils.ollama_preflight import pulled_ollama_models_with_catalog
 
 router = APIRouter()
 
 
-# Ollama + remote-provider model probes live in evomas.* now so the CLI
+# Ollama + remote-provider model probes live in opendraco.* now so the CLI
 # can reuse them; the topology dropdown is the only HTTP consumer.
 
 
@@ -161,7 +161,7 @@ def save_loaded_config(payload: LoadedConfigPayload) -> dict[str, Any]:
     # Best-effort version-control commit; failures don't propagate.
     sha: str | None = None
     try:
-        from evomas.config.history import commit_save
+        from opendraco.config.history import commit_save
         sha = commit_save(payload.name)
     except Exception as exc:  # noqa: BLE001
         logger.warning("config history commit failed for %s: %s", payload.name, exc)
@@ -199,7 +199,7 @@ def rename_loaded_config(name: str, payload: RenameConfigPayload) -> dict[str, A
     src.unlink()
     # Two histories, one rename: close the old timeline, start the new.
     try:
-        from evomas.config.history import commit_delete, commit_save
+        from opendraco.config.history import commit_delete, commit_save
         commit_delete(name)
         commit_save(new_name)
     except Exception as exc:  # noqa: BLE001
@@ -214,7 +214,7 @@ def delete_loaded_config(name: str) -> dict[str, Any]:
         raise HTTPException(404, f"loaded config '{name}' not found")
     target.unlink()
     try:
-        from evomas.config.history import commit_delete
+        from opendraco.config.history import commit_delete
         commit_delete(name)
     except Exception as exc:  # noqa: BLE001
         logger.warning("config history delete commit failed for %s: %s", name, exc)
@@ -222,7 +222,7 @@ def delete_loaded_config(name: str) -> dict[str, Any]:
 
 
 # ─── Loaded-config version history (GitPython-backed) ────────────────────────
-# History lives in a nested git repo under `evomas/config/loaded/`
+# History lives in a nested git repo under `opendraco/config/loaded/`
 # (gitignored at the project root). Every Save writes a commit.
 
 @router.get("/api/configs/loaded/{name}/history")
@@ -231,7 +231,7 @@ def list_config_history(name: str) -> dict[str, Any]:
     if "/" in name or "\\" in name or not name:
         raise HTTPException(400, "invalid config name")
     try:
-        from evomas.config.history import list_history
+        from opendraco.config.history import list_history
         return {"entries": list_history(name)}
     except Exception as exc:  # noqa: BLE001
         logger.warning("history list failed for %s: %s", name, exc)
@@ -246,7 +246,7 @@ def get_config_at_sha(name: str, sha: str) -> dict[str, Any]:
     if not re.fullmatch(r"[0-9a-fA-F]{4,40}", sha):
         raise HTTPException(400, "invalid sha")
     try:
-        from evomas.config.history import read_at
+        from opendraco.config.history import read_at
         content = read_at(name, sha)
         return {"sha": sha, "content": content}
     except Exception as exc:  # noqa: BLE001
@@ -263,7 +263,7 @@ def delete_config_history_entry(name: str, sha: str) -> dict[str, Any]:
     if not re.fullmatch(r"[0-9a-fA-F]{4,40}", sha):
         raise HTTPException(400, "invalid sha")
     try:
-        from evomas.config.history import delete_commit
+        from opendraco.config.history import delete_commit
         new_head = delete_commit(sha)
         if new_head is None:
             raise HTTPException(
@@ -292,7 +292,7 @@ def clear_config_history(name: str) -> dict[str, Any]:
     if not target.is_file():
         raise HTTPException(404, f"loaded config '{name}' not found")
     try:
-        from evomas.config.history import clear_history_for
+        from opendraco.config.history import clear_history_for
         clear_history_for(name)
         return {"ok": True, "stem": name}
     except Exception as exc:  # noqa: BLE001
@@ -341,22 +341,22 @@ def list_runs_for_config_sha(name: str, sha: str) -> dict[str, Any]:
 @router.get("/api/tools")
 def list_tools() -> list[dict[str, Any]]:
     """MCP tool catalog: `[{name, description, inputSchema, repo}]`.
-    `repo` is the bundle folder or `"evomas"` for top-level helpers."""
-    from evomas.mcp.server import MCPServer
+    `repo` is the bundle folder or `"opendraco"` for top-level helpers."""
+    from opendraco.mcp.server import MCPServer
     owner_map = tool_repo_owner_map()
     catalog = MCPServer().registry.list()
     for entry in catalog:
-        entry["repo"] = owner_map.get(entry.get("name", ""), "evomas")
+        entry["repo"] = owner_map.get(entry.get("name", ""), "opendraco")
     return catalog
 
 
 # ─── Agent types (read-only) ──────────────────────────────────────────────────
 @router.get("/api/agent-types")
 def list_agent_types_endpoint() -> list[dict[str, Any]]:
-    """Agent-type catalog with a `variants` array per type (EvoMas
+    """Agent-type catalog with a `variants` array per type (OpenDraco
     built-in first, then CSV-derived alternatives)."""
-    from evomas.agents.types import list_agent_types
-    from evomas.agents.types.variants import list_variants
+    from opendraco.agents.types import list_agent_types
+    from opendraco.agents.types.variants import list_variants
     catalog = list_agent_types()
     variants_by_type = list_variants()
     for t in catalog:
@@ -366,6 +366,6 @@ def list_agent_types_endpoint() -> list[dict[str, Any]]:
 
 @router.get("/api/agent-variants")
 def list_agent_variants_endpoint() -> dict[str, list[dict[str, Any]]]:
-    """Agent variants grouped by AGENT_TYPE; EvoMas built-in is always first."""
-    from evomas.agents.types.variants import list_variants
+    """Agent variants grouped by AGENT_TYPE; OpenDraco built-in is always first."""
+    from opendraco.agents.types.variants import list_variants
     return list_variants()

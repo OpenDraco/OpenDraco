@@ -44,7 +44,7 @@ export class TopologyPaletteComponent {
     const stored = this.selectedVariantByType[type];
     if (stored) return stored;
     const vs = this.variantsFor(type);
-    return vs.length ? vs[0].key : `evomas:${type}`;
+    return vs.length ? vs[0].key : `opendraco:${type}`;
   }
 
   onVariantChange(type: string, key: string): void {

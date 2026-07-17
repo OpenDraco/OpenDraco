@@ -44,7 +44,7 @@ export class TopologyStateService {
   predefinedConfigs: ConfigSummary[] = [];
 
   // Currently loaded config (may have unsaved in-memory edits — only writable
-  // when the active config came from evomas/config/loaded/).
+  // when the active config came from opendraco/config/loaded/).
   currentConfig: UnifiedConfig | null = null;
   // Display name (from currentConfig.name, or filename when opened from disk)
   currentConfigName: string | null = null;
@@ -97,7 +97,7 @@ export class TopologyStateService {
 
   // Persisted dropdown selection for each palette chip (one entry per
   // canonical AGENT_TYPE). Survives navigation away from the page. Empty
-  // map = every chip defaults to the EvoMas built-in (first variant).
+  // map = every chip defaults to the OpenDraco built-in (first variant).
   selectedVariantByType: Record<string, string> = {};
 
   // ─── Undo / redo history (in-RAM, per-config) ─────────────────

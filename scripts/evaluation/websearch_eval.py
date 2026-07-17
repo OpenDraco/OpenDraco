@@ -22,7 +22,7 @@ The CLI surface matches the unified evaluator contract used by
 from __future__ import annotations
 
 # OPTIONAL manifest — defaults (no WSL, single_shot) match this script.
-EVOMAS_EVALUATOR = {"needs_wsl": False}
+OPENDRACO_EVALUATOR = {"needs_wsl": False}
 
 import argparse
 import json
@@ -94,7 +94,7 @@ def main() -> int:
     ap.add_argument("--predictions", required=True, help="Predictions JSONL.")
     ap.add_argument("--report-dir", required=True, help="Where to drop the report tree.")
     ap.add_argument("--run-id", required=True, help="Run identifier baked into report filenames.")
-    ap.add_argument("--model", default="evomas-websearch", help="Model label baked into report filenames.")
+    ap.add_argument("--model", default="opendraco-websearch", help="Model label baked into report filenames.")
     args = ap.parse_args()
 
     instances = {row["instance_id"]: row for row in _read_jsonl(Path(args.instances))}

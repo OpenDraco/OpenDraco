@@ -1,6 +1,6 @@
 """Submit a predictions JSONL to the hosted SWE-bench leaderboards via `sb-cli`, as an alternative to the local Docker harness."""
 
-# No `EVOMAS_EVALUATOR` manifest needed -- defaults (single_shot, no
+# No `OPENDRACO_EVALUATOR` manifest needed -- defaults (single_shot, no
 # WSL) match this script: rows are grouped by (subset, split)
 # INTERNALLY so the framework calls us once with the unified evaluator
 # contract. See `docs/adding_a_new_problem.md`.
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SB_CLI_VENV = REPO_ROOT / "sb-cli" / "venv"
 
-# Map evomas subset names to sb-cli dataset slugs. `full` is intentionally
+# Map opendraco subset names to sb-cli dataset slugs. `full` is intentionally
 # absent: the hosted API doesn't carry it, and we'd rather fail loudly than
 # silently pick a different subset.
 SUBSET_TO_SB_DATASET: dict[str, str] = {
@@ -84,7 +84,7 @@ def run_remote_evaluation(
     if pred_path.stat().st_size == 0:
         logger.error(
             "predictions file is empty (0 bytes): %s\n"
-            "Re-run `evomas run prediction --instances <instances.jsonl> "
+            "Re-run `opendraco run prediction --instances <instances.jsonl> "
             "--output %s --config <name>` to produce predictions before "
             "submitting.",
             pred_path, pred_path.name,
@@ -110,7 +110,7 @@ def run_remote_evaluation(
     # fd open: on Windows the later `unlink()` would raise WinError 32
     # (ERROR_SHARING_VIOLATION) because our own process holds the file open.
     # Close the fd immediately; we only need the path.
-    fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="evomas-preds-")
+    fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="opendraco-preds-")
     os.close(fd)
     tmp_json = Path(tmp_path)
     try:
@@ -153,7 +153,7 @@ def run_remote_evaluation(
             # Python). Install sb-cli into the host-native venv.
             logger.error(
                 "Failed to execute sb-cli (%s). Install sb-cli into the "
-                "active evomas venv so a native Windows entry-point "
+                "active opendraco venv so a native Windows entry-point "
                 "exists:\n  pip install sb-cli",
                 e,
             )
@@ -214,7 +214,7 @@ def _group_predictions(
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Submit EvoMas predictions to the hosted SWE-bench leaderboards "
+            "Submit OpenDraco predictions to the hosted SWE-bench leaderboards "
             "via sb-cli. Rows are grouped by (subset, split) internally -- "
             "one submission per bucket -- so the framework can call this "
             "script once with the unified evaluator contract."
@@ -222,7 +222,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--predictions",
-        default="evomas_predictions.jsonl",
+        default="opendraco_predictions.jsonl",
         help="Path to the JSONL predictions file.",
     )
     parser.add_argument(
@@ -281,7 +281,7 @@ def main() -> int:
         return 1
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    base_run_id = args.run_id or f"evomas-{ts}"
+    base_run_id = args.run_id or f"opendraco-{ts}"
     output_dir = args.output_dir or "."
     tmp_dir = Path(output_dir) / "_tmp_predictions"
     tmp_dir.mkdir(parents=True, exist_ok=True)

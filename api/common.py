@@ -1,12 +1,12 @@
 """Thin api-side wrappers + re-exports.
 
-Path constants live in `evomas.paths`; FastAPI-free helpers live in
-`evomas.utils.*`. This module:
+Path constants live in `opendraco.paths`; FastAPI-free helpers live in
+`opendraco.utils.*`. This module:
 - Calls `bootstrap()` once at import time so the api server inherits
   the same sys.path / .env / mkdir setup the CLI does.
 - Re-exports the path constants so existing `from api.common import X`
   imports keep working without a wide rename.
-- Wraps a couple of evomas-side helpers that raise framework-specific
+- Wraps a couple of opendraco-side helpers that raise framework-specific
   exceptions into FastAPI `HTTPException`s.
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from evomas.paths import (
+from opendraco.paths import (
     BASE_DIR,
     CONFIG_DIR,
     EVALUATION_DIR,
@@ -31,7 +31,7 @@ from evomas.paths import (
     SWEBENCH_VENV_PYTHON,
     bootstrap,
 )
-from evomas.utils.paths import safe_under as _safe_under_pure
+from opendraco.utils.paths import safe_under as _safe_under_pure
 
 bootstrap()
 

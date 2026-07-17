@@ -1,4 +1,4 @@
-"""Convert the SWE-bench agent-type analysis CSVs into EvoMas catalog JSON + NotImplementedError tool stubs under `evomas/tools/<repo_snake>/`."""
+"""Convert the SWE-bench agent-type analysis CSVs into OpenDraco catalog JSON + NotImplementedError tool stubs under `opendraco/tools/<repo_snake>/`."""
 from __future__ import annotations
 
 import argparse
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # working implementations.
 _SKIP_REPOS = {"OpenHands"}
 
-# Canonical AGENT_TYPE taxonomy (mirrors evomas.agents.types).
+# Canonical AGENT_TYPE taxonomy (mirrors opendraco.agents.types).
 CANONICAL_TYPES: tuple[str, ...] = (
     "Locator",
     "Patcher",
@@ -112,7 +112,7 @@ def _slot_for_prompt_type(raw: str | None) -> str | None:
 
 
 def _extract_prompts(row: dict[str, str]) -> dict[str, str]:
-    """Aggregate `Prompt N Type` / `Prompt N` columns into the 3 EvoMas slots, joining same-type prompts with a blank line so no content is lost."""
+    """Aggregate `Prompt N Type` / `Prompt N` columns into the 3 OpenDraco slots, joining same-type prompts with a blank line so no content is lost."""
     buckets: dict[str, list[str]] = {"system": [], "user": [], "proxy": []}
     type_keys = [k for k in row.keys() if k and re.match(r"^Prompt\s+\d+\s+Type$", k.strip())]
     for type_key in type_keys:
@@ -231,7 +231,7 @@ def {func_name}(*args, **kwargs):
 _INIT_TEMPLATE = '''"""Auto-generated tool catalog for `{repo}` (from `{csv_name}`).
 
 Every function in this package is a `NotImplementedError` stub. The
-companion JSON at `evomas/config/agent_types/{json_name}` carries the
+companion JSON at `opendraco/config/agent_types/{json_name}` carries the
 original tool URLs and per-agent prompts.
 """
 {imports}
@@ -271,7 +271,7 @@ def _write_tool_stubs(
         written.append(name)
 
     imports = "\n".join(
-        f"from evomas.tools.{repo_snake}.{n} import {n}" for n in written
+        f"from opendraco.tools.{repo_snake}.{n} import {n}" for n in written
     )
     tools_tuple = "\n".join(f"    {n}," for n in written)
     all_exports = "\n".join(f"    \"{n}\"," for n in written)
@@ -306,8 +306,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--csv-dir",     type=Path, default=default_csv)
     parser.add_argument("--overview",    type=Path, default=default_overview)
-    parser.add_argument("--out-config",  type=Path, default=repo_root / "evomas" / "config" / "agent_types")
-    parser.add_argument("--out-tools",   type=Path, default=repo_root / "evomas" / "tools")
+    parser.add_argument("--out-config",  type=Path, default=repo_root / "opendraco" / "config" / "agent_types")
+    parser.add_argument("--out-tools",   type=Path, default=repo_root / "opendraco" / "tools")
     args = parser.parse_args()
 
     if not args.csv_dir.is_dir():
@@ -325,7 +325,7 @@ def main() -> None:
     written_jsons: list[Path] = []
     for csv_path in csv_files:
         # OpenHands has hand-written tools + a hand-tuned JSON catalog that
-        # references EvoMas tool names directly -- regenerating would overwrite
+        # references OpenDraco tool names directly -- regenerating would overwrite
         # both with NotImplementedError shells.
         if csv_path.stem in _SKIP_REPOS:
             logger.info("skipping %s (hand-maintained, not regenerated)", csv_path.stem)
