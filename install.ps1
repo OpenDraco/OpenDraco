@@ -186,13 +186,24 @@ if (-not ($dockerOk -and $wslOk)) {
             Write-Host "[install] SWE-bench venv already built at $SwebenchDir\venv (leaving as-is)" -ForegroundColor Cyan
         } else {
             Write-Host "[install] building SWE-bench harness venv inside WSL (POSIX-only)" -ForegroundColor Cyan
-            $WslPath = (& wsl.exe wslpath -a "$SwebenchDir").Trim()
-            & wsl.exe bash -lc "cd '$WslPath' && python3 -m venv venv && ./venv/bin/pip install -e ."
-            if ($LASTEXITCODE -eq 0 -and (Test-Path $SwebenchVenvPython)) {
-                Write-Host "[install] SWE-bench harness venv ready" -ForegroundColor Green
-            } else {
-                Write-Host "[install] warning: SWE-bench venv build failed (WSL may be missing python3-venv) -- build it manually:" -ForegroundColor Yellow
+            # wsl.exe interop treats backslashes as escapes, so passing the raw
+            # "C:\Users\..." path makes wslpath see "C:Users..." and fail (null ->
+            # $null.Trim() crash). wslpath -a accepts forward-slash Windows paths,
+            # so swap the separators first. Guard the result in case it still fails.
+            $SwebenchFwd = $SwebenchDir -replace '\\', '/'
+            $WslPath = & wsl.exe wslpath -a "$SwebenchFwd" 2>$null
+            if ($WslPath) { $WslPath = $WslPath.Trim() }
+            if (-not $WslPath) {
+                Write-Host "[install] warning: could not resolve a WSL path for $SwebenchDir -- build the harness venv manually:" -ForegroundColor Yellow
                 Write-Host "          wsl  # then: cd SWE-bench && python3 -m venv venv && source venv/bin/activate && pip install -e ."
+            } else {
+                & wsl.exe bash -lc "cd '$WslPath' && python3 -m venv venv && ./venv/bin/pip install -e ."
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $SwebenchVenvPython)) {
+                    Write-Host "[install] SWE-bench harness venv ready" -ForegroundColor Green
+                } else {
+                    Write-Host "[install] warning: SWE-bench venv build failed (WSL may be missing python3-venv) -- build it manually:" -ForegroundColor Yellow
+                    Write-Host "          wsl  # then: cd SWE-bench && python3 -m venv venv && source venv/bin/activate && pip install -e ."
+                }
             }
         }
     }
