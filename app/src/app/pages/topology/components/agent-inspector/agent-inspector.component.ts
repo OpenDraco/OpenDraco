@@ -18,12 +18,12 @@ import {
   AgentBlock, AgentTool, AgentType, ToolDescriptor,
 } from '../../../../models/types';
 import {
-  EvoBoxComponent, EvoSelectComponent, EvoSliderComponent,
-  EvoSpinboxComponent, EvoSwitchComponent, EvoHelpPopoverComponent,
+  DracoBoxComponent, DracoSelectComponent, DracoSliderComponent,
+  DracoSpinboxComponent, DracoSwitchComponent, DracoHelpPopoverComponent,
 } from '../../../../components/index';
 import {
   SelectOption, SelectOptionGroup,
-} from '../../../../components/select/evo-select.component';
+} from '../../../../components/select/draco-select.component';
 
 /** Local model-status colors; matches the parent's `currentModelStatus` getter. */
 export type ModelStatus = 'pulled' | 'unpulled' | 'custom';
@@ -33,8 +33,8 @@ export type ModelStatus = 'pulled' | 'unpulled' | 'custom';
   standalone: true,
   imports: [
     CommonModule, FormsModule,
-    EvoBoxComponent, EvoSelectComponent, EvoSliderComponent,
-    EvoSpinboxComponent, EvoSwitchComponent, EvoHelpPopoverComponent,
+    DracoBoxComponent, DracoSelectComponent, DracoSliderComponent,
+    DracoSpinboxComponent, DracoSwitchComponent, DracoHelpPopoverComponent,
     NgIcon,
   ],
   providers: [provideIcons(ICON)],

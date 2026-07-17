@@ -1,20 +1,20 @@
-<evo-box class="left-box" title="Instances" [hasActions]="true">
+<draco-box class="left-box" title="Instances" [hasActions]="true">
   <ng-container box-actions>
     @if (!collapsed()) {
       @if (instancesTotal) {
         <span class="count-chip">{{ instancesTotal }}</span>
       }
-      <evo-button size="sm"
+      <draco-button size="sm"
                   [variant]="customFormOpen ? 'active' : 'default'"
                   (clicked)="toggleCustomForm.emit()"
                   title="Add a public GitHub repo + problem statement as a custom instance. Inference-only — the SWE-bench evaluation harness can't score these.">
         + Custom
-      </evo-button>
-      <evo-button size="sm" [disabled]="refreshing"
+      </draco-button>
+      <draco-button size="sm" [disabled]="refreshing"
                   (clicked)="refreshAll.emit()"
                   title="Re-pull every SWE-bench subset (Lite + Full + Verified) and split from HuggingFace. Slow — Full alone is thousands of instances.">
         @if (refreshing) { <ng-icon name="refresh" />… } @else { <ng-icon name="refresh" /> }
-      </evo-button>
+      </draco-button>
     }
     <button type="button" class="rail-toggle"
             (click)="toggleCollapsed()"
@@ -124,4 +124,4 @@
   </div>
   }
 
-</evo-box>
+</draco-box>

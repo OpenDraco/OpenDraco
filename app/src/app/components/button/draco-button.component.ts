@@ -5,21 +5,21 @@ export type BtnVariant = 'default' | 'primary' | 'success' | 'danger' | 'warn' |
 export type BtnSize = 'sm' | 'md';
 
 @Component({
-  selector: 'evo-button',
+  selector: 'draco-button',
   standalone: true,
   imports: [CommonModule],
   template: `
     <button
-      class="evo-btn"
-      [class]="'evo-btn--' + variant + ' evo-btn--' + size"
+      class="draco-btn"
+      [class]="'draco-btn--' + variant + ' draco-btn--' + size"
       [disabled]="disabled"
       (click)="!disabled && clicked.emit($event)">
       <ng-content />
     </button>
   `,
-  styleUrl: './evo-button.component.css',
+  styleUrl: './draco-button.component.css',
 })
-export class EvoButtonComponent {
+export class DracoButtonComponent {
   @Input() variant: BtnVariant = 'default';
   @Input() size: BtnSize = 'md';
   @Input() disabled = false;

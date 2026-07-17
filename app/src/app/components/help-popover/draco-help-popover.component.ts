@@ -5,12 +5,12 @@ import { CommonModule } from '@angular/common';
  * Tiny `?` icon that toggles a popover with arbitrary projected content.
  *
  * Usage:
- *   <evo-help-popover>
+ *   <draco-help-popover>
  *     <p>Anything goes here.</p>
- *   </evo-help-popover>
+ *   </draco-help-popover>
  */
 @Component({
-  selector: 'evo-help-popover',
+  selector: 'draco-help-popover',
   standalone: true,
   imports: [CommonModule],
   template: `
@@ -23,9 +23,9 @@ import { CommonModule } from '@angular/common';
       }
     </span>
   `,
-  styleUrl: './evo-help-popover.component.css',
+  styleUrl: './draco-help-popover.component.css',
 })
-export class EvoHelpPopoverComponent {
+export class DracoHelpPopoverComponent {
   @Input() title = 'Help';
   @Input() align: 'left' | 'right' = 'right';
   open = false;

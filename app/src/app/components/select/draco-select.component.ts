@@ -6,24 +6,24 @@ export interface SelectOption { value: string; label: string; }
 export interface SelectOptionGroup { label: string; items: string[] | SelectOption[]; }
 
 @Component({
-  selector: 'evo-select',
+  selector: 'draco-select',
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="evo-select-wrap">
-      @if (label) { <label class="evo-label">{{ label }}</label> }
+    <div class="draco-select-wrap">
+      @if (label) { <label class="draco-label">{{ label }}</label> }
 
       @if (useGroupedPanel) {
         <!-- Custom grouped panel: stronger visual section separation than
              native <optgroup> can deliver. Click-outside + ESC dismiss. -->
-        <div class="evo-select-box grouped" [class.disabled]="isDisabled">
-          <button #trigger type="button" class="evo-select grouped-trigger"
+        <div class="draco-select-box grouped" [class.disabled]="isDisabled">
+          <button #trigger type="button" class="draco-select grouped-trigger"
                   [disabled]="isDisabled"
                   [class.open]="open"
                   (click)="toggle($event)">
             <span class="grouped-trigger-label">{{ displaySelectedLabel() || placeholder }}</span>
           </button>
-          <span class="evo-select-arrow" [class.open]="open">▾</span>
+          <span class="draco-select-arrow" [class.open]="open">▾</span>
 
           @if (open) {
             <div class="grouped-panel" role="listbox"
@@ -68,9 +68,9 @@ export interface SelectOptionGroup { label: string; items: string[] | SelectOpti
       } @else {
         <!-- Flat / native path: unchanged behaviour for every other call
              site in the app. -->
-        <div class="evo-select-box" [class.disabled]="isDisabled">
+        <div class="draco-select-box" [class.disabled]="isDisabled">
           <select
-            class="evo-select"
+            class="draco-select"
             [disabled]="isDisabled"
             [ngModel]="value"
             (ngModelChange)="onValueChange($event)">
@@ -78,19 +78,19 @@ export interface SelectOptionGroup { label: string; items: string[] | SelectOpti
               <option [value]="opt.value">{{ opt.label }}</option>
             }
           </select>
-          <span class="evo-select-arrow">▾</span>
+          <span class="draco-select-arrow">▾</span>
         </div>
       }
     </div>
   `,
-  styleUrl: './evo-select.component.css',
+  styleUrl: './draco-select.component.css',
   providers: [{
     provide: NG_VALUE_ACCESSOR,
-    useExisting: forwardRef(() => EvoSelectComponent),
+    useExisting: forwardRef(() => DracoSelectComponent),
     multi: true,
   }],
 })
-export class EvoSelectComponent implements ControlValueAccessor {
+export class DracoSelectComponent implements ControlValueAccessor {
   @Input() label = '';
   /** Placeholder text shown on the grouped-panel trigger when no value
    * is selected (or value is the blank-sentinel). Ignored on the native
@@ -161,7 +161,7 @@ export class EvoSelectComponent implements ControlValueAccessor {
   panelTop = 0;
   panelLeft = 0;
   panelWidth = 0;
-  panelMaxHeight = EvoSelectComponent.PANEL_MAX_HEIGHT;
+  panelMaxHeight = DracoSelectComponent.PANEL_MAX_HEIGHT;
   /** True when the panel should expand UP from the trigger because
    * there's more room above than below. Toggled by `positionPanel()`. */
   panelOpenUp = false;
@@ -193,11 +193,11 @@ export class EvoSelectComponent implements ControlValueAccessor {
     const btn = this.triggerRef?.nativeElement;
     if (!btn) return;
     const r = btn.getBoundingClientRect();
-    const minW = EvoSelectComponent.PANEL_MIN_WIDTH;
-    const rightGutter = EvoSelectComponent.PANEL_RIGHT_GUTTER;
-    const vGutter = EvoSelectComponent.PANEL_VERTICAL_GUTTER;
-    const maxH = EvoSelectComponent.PANEL_MAX_HEIGHT;
-    const minH = EvoSelectComponent.PANEL_MIN_HEIGHT;
+    const minW = DracoSelectComponent.PANEL_MIN_WIDTH;
+    const rightGutter = DracoSelectComponent.PANEL_RIGHT_GUTTER;
+    const vGutter = DracoSelectComponent.PANEL_VERTICAL_GUTTER;
+    const maxH = DracoSelectComponent.PANEL_MAX_HEIGHT;
+    const minH = DracoSelectComponent.PANEL_MIN_HEIGHT;
     // Width: at least PANEL_MIN_WIDTH and at least as wide as the trigger;
     // capped so the right edge stays inside the viewport.
     const maxFitting = Math.max(160, window.innerWidth - r.left - rightGutter);

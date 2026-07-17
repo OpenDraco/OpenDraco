@@ -6,7 +6,7 @@ import { FormsModule } from '@angular/forms';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { ICON } from '../../../../icons';
 import {
-  EvoButtonComponent, EvoSelectComponent, EvoSwitchComponent,
+  DracoButtonComponent, DracoSelectComponent, DracoSwitchComponent,
 } from '../../../../components/index';
 
 @Component({
@@ -14,7 +14,7 @@ import {
   standalone: true,
   imports: [
     CommonModule, FormsModule,
-    EvoButtonComponent, EvoSelectComponent, EvoSwitchComponent,
+    DracoButtonComponent, DracoSelectComponent, DracoSwitchComponent,
     NgIcon,
   ],
   providers: [provideIcons(ICON)],

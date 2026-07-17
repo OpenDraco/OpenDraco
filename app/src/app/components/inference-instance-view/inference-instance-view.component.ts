@@ -12,12 +12,12 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { ICON } from '../../icons';
 import { AgentCard, RunInstance, formatDurationMs } from '../../services/inference-run.service';
 import { HandoffChip } from '../../models/types';
-import { EvoBadgeComponent } from '../badge/evo-badge.component';
+import { DracoBadgeComponent } from '../badge/draco-badge.component';
 
 @Component({
   selector: 'app-inference-instance-view',
   standalone: true,
-  imports: [CommonModule, EvoBadgeComponent, NgIcon],
+  imports: [CommonModule, DracoBadgeComponent, NgIcon],
   providers: [provideIcons(ICON)],
   changeDetection: ChangeDetectionStrategy.Default,
   templateUrl: './inference-instance-view.component.html',

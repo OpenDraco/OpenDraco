@@ -21,13 +21,13 @@ import { AgentVariant } from '../../models/types';
  * `agent-type` only) still work -- they fall back to the OpenDraco built-in.
  */
 @Component({
-  selector: 'evo-agent-type-picker',
+  selector: 'draco-agent-type-picker',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './evo-agent-type-picker.component.html',
-  styleUrl: './evo-agent-type-picker.component.css',
+  templateUrl: './draco-agent-type-picker.component.html',
+  styleUrl: './draco-agent-type-picker.component.css',
 })
-export class EvoAgentTypePickerComponent {
+export class DracoAgentTypePickerComponent {
   @Input() agentType = '';
   @Input() color = '#888';
   @Input() variants: AgentVariant[] = [];

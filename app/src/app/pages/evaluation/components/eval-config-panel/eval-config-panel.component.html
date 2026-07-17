@@ -1,4 +1,4 @@
-<evo-box title="Evaluation Config" class="config-panel" [hasActions]="true">
+<draco-box title="Evaluation Config" class="config-panel" [hasActions]="true">
   <ng-container box-actions>
     <button type="button" class="rail-toggle"
             (click)="toggleCollapsed()"
@@ -15,7 +15,7 @@
       <label class="field-label">Predictions file (.jsonl)</label>
       <div class="pred-row">
         @if (predictionOptions.length > 0) {
-          <evo-select class="pred-select"
+          <draco-select class="pred-select"
                       [options]="predictionOptions"
                       [ngModel]="predictionsPath"
                       (ngModelChange)="onPredictionsPathChange($event)"
@@ -25,15 +25,15 @@
         }
         <input #predictionFile type="file" accept=".jsonl,application/x-ndjson,application/json"
                (change)="predictionFileChosen.emit($event)" hidden />
-        <evo-button size="sm"
+        <draco-button size="sm"
                     [disabled]="running"
                     (clicked)="predictionFile.click()"
                     [title]="'Browse to a .jsonl prediction file (must live under ' + predictionsDir + '/)'">
           <ng-icon name="folder" />
-        </evo-button>
-        <evo-button size="sm"
+        </draco-button>
+        <draco-button size="sm"
                     (clicked)="refreshPredictions.emit()"
-                    title="Refresh predictions list"><ng-icon name="refresh" /></evo-button>
+                    title="Refresh predictions list"><ng-icon name="refresh" /></draco-button>
       </div>
       @if (filePickerError) {
         <div class="hint-text err">{{ filePickerError }}</div>
@@ -43,7 +43,7 @@
     <!-- Workers -->
     <div class="field-block">
       <label class="field-label">Max workers</label>
-      <evo-spinbox [min]="1" [max]="16" [step]="1"
+      <draco-spinbox [min]="1" [max]="16" [step]="1"
                    [ngModel]="maxWorkers"
                    (ngModelChange)="onMaxWorkersChange($event)" />
     </div>
@@ -55,7 +55,7 @@
          no items and the run button stays disabled. -->
     <div class="field-block">
       <label class="field-label">Evaluator script</label>
-      <evo-select [options]="evaluatorOptions"
+      <draco-select [options]="evaluatorOptions"
                   [ngModel]="evaluator"
                   (ngModelChange)="onEvaluatorChange($event)"
                   [disabled]="running || evaluatorOptions.length === 0" />
@@ -111,13 +111,13 @@
 
     <div class="run-row">
       @if (!running) {
-        <evo-button variant="success"
+        <draco-button variant="success"
                     [disabled]="!predictionsPath || !evaluator"
                     (clicked)="run.emit()">
           <ng-icon name="play" /> Run Evaluation
-        </evo-button>
+        </draco-button>
       } @else {
-        <evo-button variant="danger" (clicked)="cancel.emit()"><ng-icon name="stop" /> Cancel</evo-button>
+        <draco-button variant="danger" (clicked)="cancel.emit()"><ng-icon name="stop" /> Cancel</draco-button>
       }
     </div>
 
@@ -171,4 +171,4 @@
 
   </div>
   }
-</evo-box>
+</draco-box>

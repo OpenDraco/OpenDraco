@@ -5,7 +5,7 @@ import { Component, ElementRef, EventEmitter, HostBinding, Input, Output, ViewCh
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { EvoBoxComponent, EvoButtonComponent, EvoSwitchComponent } from '../../../../components/index';
+import { DracoBoxComponent, DracoButtonComponent, DracoSwitchComponent } from '../../../../components/index';
 import { ICON } from '../../../../icons';
 import { ResultInstance, ResultRun } from '../../../../models/types';
 
@@ -18,7 +18,7 @@ export interface JobGroup {
 @Component({
   selector: 'app-instance-tree-picker',
   standalone: true,
-  imports: [CommonModule, FormsModule, EvoBoxComponent, EvoButtonComponent, EvoSwitchComponent, NgIcon],
+  imports: [CommonModule, FormsModule, DracoBoxComponent, DracoButtonComponent, DracoSwitchComponent, NgIcon],
   providers: [provideIcons(ICON)],
   templateUrl: './instance-tree-picker.component.html',
   styleUrl: './instance-tree-picker.component.css',

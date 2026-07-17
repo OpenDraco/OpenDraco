@@ -23,7 +23,7 @@
         <div>Select an instance to view its prediction and evaluation</div>
       </div>
     } @else {
-      <evo-box [title]="selectedId!" class="header-box">
+      <draco-box [title]="selectedId!" class="header-box">
         <div class="run-pickers">
           <div class="picker-block" style="flex: 1;">
             <label class="field-label">Run</label>
@@ -31,22 +31,22 @@
               <div class="empty-hint sm">— no runs —</div>
             } @else {
               <div class="run-row">
-                <evo-select [options]="runOptions"
+                <draco-select [options]="runOptions"
                             [ngModel]="selectedRunId"
                             (ngModelChange)="selectRun($event)" />
-                <evo-button size="sm"
+                <draco-button size="sm"
                             [disabled]="!predictionConfigJson"
                             title="Download the unified-config JSON used to produce this run"
-                            (clicked)="downloadPredictionConfig()"><ng-icon name="download" /> Config</evo-button>
-                <evo-button size="sm"
+                            (clicked)="downloadPredictionConfig()"><ng-icon name="download" /> Config</draco-button>
+                <draco-button size="sm"
                             [disabled]="!selectedPredFile"
                             title="Download a Jupyter notebook that reproduces this run end-to-end (inference + evaluation), with the exact config + instance ids inlined."
-                            (clicked)="downloadNotebook()"><ng-icon name="download" /> Notebook</evo-button>
+                            (clicked)="downloadNotebook()"><ng-icon name="download" /> Notebook</draco-button>
               </div>
             }
           </div>
         </div>
-      </evo-box>
+      </draco-box>
 
       <div class="inner-grid">
         <app-prediction-panel

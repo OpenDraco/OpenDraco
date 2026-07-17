@@ -3,34 +3,34 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 
 @Component({
-  selector: 'evo-spinbox',
+  selector: 'draco-spinbox',
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="evo-spinbox-wrap">
-      @if (label) { <label class="evo-label">{{ label }}</label> }
-      <div class="evo-spinbox" [class.disabled]="isDisabled">
-        <button class="evo-spin-btn" (click)="decrement()" [disabled]="isDisabled || value <= min" tabindex="-1">−</button>
+    <div class="draco-spinbox-wrap">
+      @if (label) { <label class="draco-label">{{ label }}</label> }
+      <div class="draco-spinbox" [class.disabled]="isDisabled">
+        <button class="draco-spin-btn" (click)="decrement()" [disabled]="isDisabled || value <= min" tabindex="-1">−</button>
         <input
-          class="evo-spin-input"
+          class="draco-spin-input"
           type="number"
           [min]="min" [max]="max" [step]="step"
           [value]="value"
           [disabled]="isDisabled"
           (change)="onInputChange($any($event.target).value)"
           (input)="onInputChange($any($event.target).value)" />
-        <button class="evo-spin-btn" (click)="increment()" [disabled]="isDisabled || value >= max" tabindex="-1">+</button>
+        <button class="draco-spin-btn" (click)="increment()" [disabled]="isDisabled || value >= max" tabindex="-1">+</button>
       </div>
     </div>
   `,
-  styleUrl: './evo-spinbox.component.css',
+  styleUrl: './draco-spinbox.component.css',
   providers: [{
     provide: NG_VALUE_ACCESSOR,
-    useExisting: forwardRef(() => EvoSpinboxComponent),
+    useExisting: forwardRef(() => DracoSpinboxComponent),
     multi: true,
   }],
 })
-export class EvoSpinboxComponent implements ControlValueAccessor {
+export class DracoSpinboxComponent implements ControlValueAccessor {
   @Input() label = '';
   @Input() min = 0;
   @Input() max = 9999;

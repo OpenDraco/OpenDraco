@@ -3,19 +3,19 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 
 @Component({
-  selector: 'evo-slider',
+  selector: 'draco-slider',
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="evo-slider-wrap">
-      <div class="evo-slider-header">
-        @if (label) { <span class="evo-label">{{ label }}</span> }
-        <span class="evo-slider-val">{{ value | number:'1.0-2' }}</span>
+    <div class="draco-slider-wrap">
+      <div class="draco-slider-header">
+        @if (label) { <span class="draco-label">{{ label }}</span> }
+        <span class="draco-slider-val">{{ value | number:'1.0-2' }}</span>
       </div>
-      <div class="evo-slider-track">
-        <div class="evo-slider-fill" [style.width]="fillPct + '%'"></div>
+      <div class="draco-slider-track">
+        <div class="draco-slider-fill" [style.width]="fillPct + '%'"></div>
         <input
-          class="evo-slider-input"
+          class="draco-slider-input"
           type="range"
           [min]="min" [max]="max" [step]="step"
           [value]="value"
@@ -24,14 +24,14 @@ import { CommonModule } from '@angular/common';
       </div>
     </div>
   `,
-  styleUrl: './evo-slider.component.css',
+  styleUrl: './draco-slider.component.css',
   providers: [{
     provide: NG_VALUE_ACCESSOR,
-    useExisting: forwardRef(() => EvoSliderComponent),
+    useExisting: forwardRef(() => DracoSliderComponent),
     multi: true,
   }],
 })
-export class EvoSliderComponent implements ControlValueAccessor {
+export class DracoSliderComponent implements ControlValueAccessor {
   @Input() label = '';
   @Input() min = 0;
   @Input() max = 1;

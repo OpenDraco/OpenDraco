@@ -15,7 +15,7 @@ import { ICON } from '../../../../icons';
 import { PredictionInspection } from '../../../../models/types';
 import { ResultStats } from '../../../../services/evaluation-run.service';
 import {
-  EvoBoxComponent, EvoButtonComponent, EvoSelectComponent, EvoSpinboxComponent,
+  DracoBoxComponent, DracoButtonComponent, DracoSelectComponent, DracoSpinboxComponent,
 } from '../../../../components/index';
 
 @Component({
@@ -23,7 +23,7 @@ import {
   standalone: true,
   imports: [
     CommonModule, FormsModule,
-    EvoBoxComponent, EvoButtonComponent, EvoSelectComponent, EvoSpinboxComponent,
+    DracoBoxComponent, DracoButtonComponent, DracoSelectComponent, DracoSpinboxComponent,
     NgIcon,
   ],
   providers: [provideIcons(ICON)],

@@ -14,7 +14,7 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { ICON } from '../../../../icons';
 import { UnifiedConfig } from '../../../../models/types';
 import {
-  EvoButtonComponent, EvoHelpPopoverComponent,
+  DracoButtonComponent, DracoHelpPopoverComponent,
 } from '../../../../components/index';
 
 @Component({
@@ -22,7 +22,7 @@ import {
   standalone: true,
   imports: [
     CommonModule,
-    EvoButtonComponent, EvoHelpPopoverComponent,
+    DracoButtonComponent, DracoHelpPopoverComponent,
     NgIcon,
   ],
   providers: [provideIcons(ICON)],

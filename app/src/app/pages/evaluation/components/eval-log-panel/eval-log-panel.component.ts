@@ -13,12 +13,12 @@ import {
 import { CommonModule } from '@angular/common';
 
 import { LogLine } from '../../../../services/evaluation-run.service';
-import { EvoButtonComponent, EvoBoxComponent } from '../../../../components/index';
+import { DracoButtonComponent, DracoBoxComponent } from '../../../../components/index';
 
 @Component({
   selector: 'app-eval-log-panel',
   standalone: true,
-  imports: [CommonModule, EvoButtonComponent, EvoBoxComponent],
+  imports: [CommonModule, DracoButtonComponent, DracoBoxComponent],
   templateUrl: './eval-log-panel.component.html',
   styleUrl: './eval-log-panel.component.css',
 })

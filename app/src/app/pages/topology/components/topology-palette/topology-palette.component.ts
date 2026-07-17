@@ -1,5 +1,5 @@
 /** Bottom palette strip: one draggable chip per canonical AGENT_TYPE.
- * The chip + its variant dropdown live in `evo-agent-type-picker`;
+ * The chip + its variant dropdown live in `draco-agent-type-picker`;
  * this component is just the layout shell + the parent-bound variant
  * selection. Drag-start payload is handled inside the chip itself. */
 import {
@@ -8,12 +8,12 @@ import {
 import { CommonModule } from '@angular/common';
 
 import { AgentType, AgentVariant } from '../../../../models/types';
-import { EvoAgentTypePickerComponent } from '../../../../components/index';
+import { DracoAgentTypePickerComponent } from '../../../../components/index';
 
 @Component({
   selector: 'app-topology-palette',
   standalone: true,
-  imports: [CommonModule, EvoAgentTypePickerComponent],
+  imports: [CommonModule, DracoAgentTypePickerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './topology-palette.component.html',
   styleUrl: './topology-palette.component.css',

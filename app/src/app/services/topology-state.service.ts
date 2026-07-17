@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { AgentBlock, ConfigSummary, OllamaModel, UnifiedConfig } from '../models/types';
-import type { SelectOption } from '../components/select/evo-select.component';
+import type { SelectOption } from '../components/select/draco-select.component';
 
 /** Single in-RAM history entry: the canonical config plus per-node positions. */
 export interface TopologySnapshot {

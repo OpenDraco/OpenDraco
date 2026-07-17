@@ -1,18 +1,18 @@
-<evo-box title="Prediction" [hasActions]="true" class="inner-box">
+<draco-box title="Prediction" [hasActions]="true" class="inner-box">
   <ng-container box-actions>
-    <evo-button size="sm" [disabled]="!prediction" (clicked)="downloadPrediction.emit()"><ng-icon name="download" /> JSONL</evo-button>
-    <evo-button size="sm" [disabled]="!prediction"
+    <draco-button size="sm" [disabled]="!prediction" (clicked)="downloadPrediction.emit()"><ng-icon name="download" /> JSONL</draco-button>
+    <draco-button size="sm" [disabled]="!prediction"
                 title="Reveal the .jsonl file in the OS file explorer"
-                (clicked)="reveal.emit(selectedPredFile?.path)"><ng-icon name="folder" /> JSONL</evo-button>
-    <evo-button size="sm" [disabled]="!predictionLog || predictionLogMissing"
+                (clicked)="reveal.emit(selectedPredFile?.path)"><ng-icon name="folder" /> JSONL</draco-button>
+    <draco-button size="sm" [disabled]="!predictionLog || predictionLogMissing"
                 title="Download the NDJSON SSE-event transcript saved when the prediction was generated"
-                (clicked)="downloadPredictionLog.emit()"><ng-icon name="download" /> Log</evo-button>
-    <evo-button size="sm" [disabled]="!predictionLogPath"
+                (clicked)="downloadPredictionLog.emit()"><ng-icon name="download" /> Log</draco-button>
+    <draco-button size="sm" [disabled]="!predictionLogPath"
                 title="Reveal the .log file in the OS file explorer"
-                (clicked)="reveal.emit(predictionLogPath)"><ng-icon name="folder" /> Log</evo-button>
-    <evo-button size="sm" [disabled]="!selectedPredFile"
+                (clicked)="reveal.emit(predictionLogPath)"><ng-icon name="folder" /> Log</draco-button>
+    <draco-button size="sm" [disabled]="!selectedPredFile"
                 title="Render the run's NDJSON event log as agent cards + hand-off chips — same view as the Inference page."
-                (clicked)="openLogViewer.emit()"><ng-icon name="eye" /> View</evo-button>
+                (clicked)="openLogViewer.emit()"><ng-icon name="eye" /> View</draco-button>
   </ng-container>
   @if (!prediction) {
     <div class="empty-hint">No prediction selected</div>
@@ -59,7 +59,7 @@
 
     <div class="logs-toggle-row">
       <label class="field-label">Show run log (events)</label>
-      <evo-switch [ngModel]="showPredictionLog" (ngModelChange)="togglePredictionLog.emit($any($event))" />
+      <draco-switch [ngModel]="showPredictionLog" (ngModelChange)="togglePredictionLog.emit($any($event))" />
     </div>
     @if (showPredictionLog) {
       @if (predictionLogMissing) {
@@ -79,4 +79,4 @@
       }
     }
   }
-</evo-box>
+</draco-box>

@@ -12,13 +12,13 @@ import {
   Instance, SUBSET_SPLITS, SwebenchSplit, SwebenchSubset,
 } from '../../../../models/types';
 import {
-  EvoBoxComponent, EvoButtonComponent,
+  DracoBoxComponent, DracoButtonComponent,
 } from '../../../../components/index';
 
 @Component({
   selector: 'app-instance-picker-tree',
   standalone: true,
-  imports: [CommonModule, FormsModule, EvoBoxComponent, EvoButtonComponent, NgIcon],
+  imports: [CommonModule, FormsModule, DracoBoxComponent, DracoButtonComponent, NgIcon],
   providers: [provideIcons(ICON)],
   templateUrl: './instance-picker-tree.component.html',
   styleUrl: './instance-picker-tree.component.css',

@@ -5,7 +5,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { EvoBoxComponent, EvoButtonComponent, EvoSwitchComponent } from '../../../../components/index';
+import { DracoBoxComponent, DracoButtonComponent, DracoSwitchComponent } from '../../../../components/index';
 import { ICON } from '../../../../icons';
 import { ResultEvaluation, ResultEvaluationDir, ResultPredictionFile } from '../../../../models/types';
 import { LogLine } from '../../../../services/evaluation-run.service';
@@ -15,7 +15,7 @@ type LogName = 'run_instance.log' | 'test_output.txt' | 'eval.sh' | 'patch.diff'
 @Component({
   selector: 'app-evaluation-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, EvoBoxComponent, EvoButtonComponent, EvoSwitchComponent, NgIcon],
+  imports: [CommonModule, FormsModule, DracoBoxComponent, DracoButtonComponent, DracoSwitchComponent, NgIcon],
   providers: [provideIcons(ICON)],
   templateUrl: './evaluation-panel.component.html',
   styleUrl: './evaluation-panel.component.css',

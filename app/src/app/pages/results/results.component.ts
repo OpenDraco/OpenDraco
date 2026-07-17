@@ -18,7 +18,7 @@ import {
   UnifiedConfig,
 } from '../../models/types';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { EvoBoxComponent, EvoButtonComponent, EvoSelectComponent } from '../../components/index';
+import { DracoBoxComponent, DracoButtonComponent, DracoSelectComponent } from '../../components/index';
 import { ICON } from '../../icons';
 import {
   RunInstance, buildNodeColors, parseNdjsonToRunInstance,
@@ -36,7 +36,7 @@ type LogName = 'run_instance.log' | 'test_output.txt' | 'eval.sh' | 'patch.diff'
   selector: 'app-results',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, EvoBoxComponent, EvoButtonComponent, EvoSelectComponent,
+    CommonModule, FormsModule, DracoBoxComponent, DracoButtonComponent, DracoSelectComponent,
     InstanceTreePickerComponent, PredictionPanelComponent,
     EvaluationPanelComponent, LogViewerModalComponent, NgIcon,
   ],

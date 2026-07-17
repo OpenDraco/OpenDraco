@@ -11,12 +11,12 @@ import {
 import { CommonModule } from '@angular/common';
 
 import { ConfigSummary } from '../../../../models/types';
-import { EvoBoxComponent } from '../../../../components/index';
+import { DracoBoxComponent } from '../../../../components/index';
 
 @Component({
   selector: 'app-config-list-panel',
   standalone: true,
-  imports: [CommonModule, EvoBoxComponent],
+  imports: [CommonModule, DracoBoxComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './config-list-panel.component.html',
   styleUrl: './config-list-panel.component.css',

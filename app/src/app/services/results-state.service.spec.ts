@@ -13,7 +13,7 @@ describe('ResultsStateService', () => {
   it('reset() returns the service to its initial state', () => {
     const svc = new ResultsStateService();
     svc.selectedId = 'sqlfluff__sqlfluff-1625';
-    svc.selectedRunId = 'evo-star-abcd1234';
+    svc.selectedRunId = 'draco-star-abcd1234';
     svc.showLogs = true;
     svc.activeLog = 'test_output.txt';
 

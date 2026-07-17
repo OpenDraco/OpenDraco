@@ -19,10 +19,10 @@ describe('TopologyStateService', () => {
     const sub = vi.fn();
     svc.configChanged.subscribe(sub);
 
-    svc.setCurrentConfig(cfg, 'evo-a');
+    svc.setCurrentConfig(cfg, 'draco-a');
 
     expect(svc.currentConfig).toBe(cfg);
-    expect(svc.currentConfigName).toBe('evo-a');
+    expect(svc.currentConfigName).toBe('draco-a');
     expect(sub).toHaveBeenCalledWith(cfg);
   });
 

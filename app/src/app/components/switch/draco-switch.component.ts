@@ -3,25 +3,25 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 
 @Component({
-  selector: 'evo-switch',
+  selector: 'draco-switch',
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="evo-switch-row" [class.disabled]="isDisabled" (click)="toggle()">
-      @if (label) { <span class="evo-sw-label">{{ label }}</span> }
-      <div class="evo-switch" [class.on]="value">
-        <div class="evo-switch-thumb"></div>
+    <div class="draco-switch-row" [class.disabled]="isDisabled" (click)="toggle()">
+      @if (label) { <span class="draco-sw-label">{{ label }}</span> }
+      <div class="draco-switch" [class.on]="value">
+        <div class="draco-switch-thumb"></div>
       </div>
     </div>
   `,
-  styleUrl: './evo-switch.component.css',
+  styleUrl: './draco-switch.component.css',
   providers: [{
     provide: NG_VALUE_ACCESSOR,
-    useExisting: forwardRef(() => EvoSwitchComponent),
+    useExisting: forwardRef(() => DracoSwitchComponent),
     multi: true,
   }],
 })
-export class EvoSwitchComponent implements ControlValueAccessor {
+export class DracoSwitchComponent implements ControlValueAccessor {
   @Input() label = '';
   @Input() set disabled(v: boolean) { this.isDisabled = !!v; }
 

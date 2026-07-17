@@ -7,7 +7,7 @@
    * Why 400 (vs Evaluation's 340): the Results picker carries the full
    * SWE-bench / custom instance ids in `.inst-name` (e.g. a 49-char
    * `custom-xiangfengyepan-opendraco-test-instance-fcf59bc`). The host
-   * can't *truly* grow with content because evo-box's `overflow: hidden`
+   * can't *truly* grow with content because draco-box's `overflow: hidden`
    * + the inner `overflow-y: auto` scroll containers clip the inst-
    * name's intrinsic width before it propagates back up. So we pick a
    * baseline that comfortably fits the longest expected id. The user
@@ -20,8 +20,8 @@
   transition: min-width 0.18s ease, width 0.18s ease;
 }
 :host(.collapsed) { min-width: 0; width: 36px; }
-:host(.collapsed) ::ng-deep .evo-box-title { display: none; }
-:host(.collapsed) ::ng-deep .evo-box-header {
+:host(.collapsed) ::ng-deep .draco-box-title { display: none; }
+:host(.collapsed) ::ng-deep .draco-box-header {
   padding: 6px 4px;
   justify-content: center;
 }
@@ -42,7 +42,7 @@
 .rail-toggle:hover { color: var(--text); background: var(--bg-2); border-color: var(--border); }
 
 .left-box { flex: 1; min-height: 0; }
-.left-box ::ng-deep .evo-box-body { padding: 0; display: flex; flex-direction: column; min-height: 0; }
+.left-box ::ng-deep .draco-box-body { padding: 0; display: flex; flex-direction: column; min-height: 0; }
 
 .instance-search {
   padding: 6px 10px;
@@ -122,7 +122,7 @@
   /* Keep instance ids on a single line, but DO NOT clip / ellipsize —
    * we want the longest id to push the host's intrinsic width above
    * min-width: 280px so the central column shrinks to make room. The
-   * scrollbar (overflow-y on .evo-box-body) handles vertical
+   * scrollbar (overflow-y on .draco-box-body) handles vertical
    * overflow; horizontal grow is owned by the host's min-width rule. */
   white-space: nowrap;
 }

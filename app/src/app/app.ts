@@ -5,14 +5,14 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { ApiService } from './services/api.service';
 import { TopologyStateService } from './services/topology-state.service';
 import { UnifiedConfig, ConfigSummary } from './models/types';
-import { ApragonIconComponent, EvoSelectComponent } from './components/index';
+import { ApragonIconComponent, DracoSelectComponent } from './components/index';
 import { DialogHostComponent } from './components/dialog-host/dialog-host.component';
 import { DialogService } from './services/dialog.service';
-import type { SelectOption, SelectOptionGroup } from './components/select/evo-select.component';
+import type { SelectOption, SelectOptionGroup } from './components/select/draco-select.component';
 
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, FormsModule, RouterOutlet, RouterLink, RouterLinkActive, ApragonIconComponent, EvoSelectComponent, DialogHostComponent],
+  imports: [CommonModule, FormsModule, RouterOutlet, RouterLink, RouterLinkActive, ApragonIconComponent, DracoSelectComponent, DialogHostComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -40,7 +40,7 @@ export class App implements OnInit, OnDestroy {
   templateError = '';
   templateBusy = false;
 
-  /** `templateOptions` shaped for `<evo-select [optgroups]>` — Predefined then Loaded. */
+  /** `templateOptions` shaped for `<draco-select [optgroups]>` — Predefined then Loaded. */
   get templateSelectGroups(): SelectOptionGroup[] {
     const groups: SelectOptionGroup[] = [];
     const predefined = this.templateOptions.filter(c => c.source === 'predefined');

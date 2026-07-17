@@ -1,4 +1,4 @@
-<evo-box class="right-box"
+<draco-box class="right-box"
          [class.collapsed]="!selectedAgent"
          [title]="selectedAgent ? '' : 'Agent Config'"
          [hasActions]="!!selectedAgent">
@@ -32,7 +32,7 @@
               [disabled]="!isLoadedConfig"
               (click)="resetParams.emit()"
               title="Reset parameters to type defaults"><ng-icon name="refresh" /> Reset</button>
-      <evo-help-popover title="Parameter reference">
+      <draco-help-popover title="Parameter reference">
         <dl>
           <dt>Model</dt>      <dd>Ollama model name pulled from <code>ollama list</code>.</dd>
           <dt>Router</dt>     <dd>How the node picks its next edge: <code>python</code> calls the agent's <code>route(state)</code>, <code>llm</code> asks an LLM, blank → static single edge.</dd>
@@ -48,7 +48,7 @@
           <dt>repeat_last_n</dt><dd>How many recent tokens the repeat penalty looks back at. <code>-1</code> uses num_ctx.</dd>
           <dt>seed</dt>       <dd>RNG seed for reproducibility. <code>0</code> picks a random one.</dd>
         </dl>
-      </evo-help-popover>
+      </draco-help-popover>
     </div>
 
     @if (paramsOpen) {
@@ -81,7 +81,7 @@
                [disabled]="!isLoadedConfig"
                [ngModel]="modelFilter"
                (ngModelChange)="onModelFilterChange($event)" />
-        <evo-select [options]="modelSelectOptions"
+        <draco-select [options]="modelSelectOptions"
                     [disabled]="!isLoadedConfig"
                     [ngModel]="agentBlock.model"
                     (ngModelChange)="onAgentField('model', $event)" />
@@ -91,7 +91,7 @@
       @if (supportsKnob('think')) {
         <div class="cfg-row">
           <label class="cfg-label">Think</label>
-          <evo-switch [disabled]="!isLoadedConfig"
+          <draco-switch [disabled]="!isLoadedConfig"
                       [ngModel]="!!agentBlock.think"
                       (ngModelChange)="onAgentField('think', $event)" />
         </div>
@@ -101,7 +101,7 @@
       @if (supportsKnob('stream')) {
         <div class="cfg-row">
           <label class="cfg-label">Stream</label>
-          <evo-switch [disabled]="!isLoadedConfig"
+          <draco-switch [disabled]="!isLoadedConfig"
                       [ngModel]="!!agentBlock.stream"
                       (ngModelChange)="onAgentField('stream', $event)" />
         </div>
@@ -109,7 +109,7 @@
 
       <!-- temperature -->
       @if (supportsKnob('temperature')) {
-        <evo-slider label="Temperature" [min]="0" [max]="2" [step]="0.05"
+        <draco-slider label="Temperature" [min]="0" [max]="2" [step]="0.05"
                     [disabled]="!isLoadedConfig"
                     [ngModel]="agentBlock.temperature"
                     (ngModelChange)="onAgentField('temperature', $event)" />
@@ -117,7 +117,7 @@
 
       <!-- top_p -->
       @if (supportsKnob('top_p')) {
-        <evo-slider label="top_p" [min]="0" [max]="1" [step]="0.01"
+        <draco-slider label="top_p" [min]="0" [max]="1" [step]="0.01"
                     [disabled]="!isLoadedConfig"
                     [ngModel]="agentBlock.top_p"
                     (ngModelChange)="onAgentField('top_p', $event)" />
@@ -125,7 +125,7 @@
 
       <!-- min_p (Ollama only) -->
       @if (supportsKnob('min_p')) {
-        <evo-slider label="min_p" [min]="0" [max]="1" [step]="0.01"
+        <draco-slider label="min_p" [min]="0" [max]="1" [step]="0.01"
                     [disabled]="!isLoadedConfig"
                     [ngModel]="agentBlock.min_p"
                     (ngModelChange)="onAgentField('min_p', $event)" />
@@ -133,7 +133,7 @@
 
       <!-- repeat_penalty (Ollama only) -->
       @if (supportsKnob('repeat_penalty')) {
-        <evo-slider label="Repeat Penalty" [min]="0" [max]="2" [step]="0.01"
+        <draco-slider label="Repeat Penalty" [min]="0" [max]="2" [step]="0.01"
                     [disabled]="!isLoadedConfig"
                     [ngModel]="agentBlock.repeat_penalty"
                     (ngModelChange)="onAgentField('repeat_penalty', $event)" />
@@ -143,7 +143,7 @@
       @if (supportsKnob('top_k')) {
         <div class="cfg-row">
           <label class="cfg-label">top_k</label>
-          <evo-spinbox [min]="0" [max]="200" [step]="1"
+          <draco-spinbox [min]="0" [max]="200" [step]="1"
                        [disabled]="!isLoadedConfig"
                        [ngModel]="agentBlock.top_k"
                        (ngModelChange)="onAgentField('top_k', $event)" />
@@ -154,7 +154,7 @@
       @if (supportsKnob('num_ctx')) {
         <div class="cfg-row">
           <label class="cfg-label">num_ctx</label>
-          <evo-spinbox [min]="512" [max]="131072" [step]="512"
+          <draco-spinbox [min]="512" [max]="131072" [step]="512"
                        [disabled]="!isLoadedConfig"
                        [ngModel]="agentBlock.num_ctx"
                        (ngModelChange)="onAgentField('num_ctx', $event)" />
@@ -165,7 +165,7 @@
       @if (supportsKnob('num_predict')) {
         <div class="cfg-row">
           <label class="cfg-label">num_predict</label>
-          <evo-spinbox [min]="-1" [max]="4096" [step]="1"
+          <draco-spinbox [min]="-1" [max]="4096" [step]="1"
                        [disabled]="!isLoadedConfig"
                        [ngModel]="agentBlock.num_predict"
                        (ngModelChange)="onAgentField('num_predict', $event)" />
@@ -176,7 +176,7 @@
       @if (supportsKnob('repeat_last_n')) {
         <div class="cfg-row">
           <label class="cfg-label">repeat_last_n</label>
-          <evo-spinbox [min]="-1" [max]="512" [step]="1"
+          <draco-spinbox [min]="-1" [max]="512" [step]="1"
                        [disabled]="!isLoadedConfig"
                        [ngModel]="agentBlock.repeat_last_n"
                        (ngModelChange)="onAgentField('repeat_last_n', $event)" />
@@ -187,7 +187,7 @@
       @if (supportsKnob('seed')) {
         <div class="cfg-row">
           <label class="cfg-label">seed</label>
-          <evo-spinbox [min]="-1" [max]="999999" [step]="1"
+          <draco-spinbox [min]="-1" [max]="999999" [step]="1"
                        [disabled]="!isLoadedConfig"
                        [ngModel]="agentBlock.seed"
                        (ngModelChange)="onAgentField('seed', $event)" />
@@ -210,13 +210,13 @@
                 [disabled]="!isLoadedConfig"
                 (click)="resetPrompts.emit()"
                 title="Reset prompts to type defaults"><ng-icon name="refresh" /> Reset</button>
-        <evo-help-popover title="Prompt slots">
+        <draco-help-popover title="Prompt slots">
           <dl>
             <dt>system</dt><dd>Instruction sent as the model's system role. Sets the agent's persona, rules, and output format.</dd>
             <dt>user</dt>  <dd>Template for the user-role message. Supports Python <code>str.format(...)</code> placeholders like <code>{{ '{' }}issue{{ '}' }}</code>.</dd>
             <dt>proxy</dt> <dd>Template injected when this agent answers another agent (proxy hop in the topology).</dd>
           </dl>
-        </evo-help-popover>
+        </draco-help-popover>
       </div>
 
       @if (promptsOpen) {
@@ -263,7 +263,7 @@
                 [disabled]="!isLoadedConfig"
                 (click)="resetTools.emit()"
                 title="Reset tools to type defaults"><ng-icon name="refresh" /> Reset</button>
-        <evo-help-popover title="Tool whitelist & defaults">
+        <draco-help-popover title="Tool whitelist & defaults">
           <p>Restrict which MCP tools this agent may call, and pin default arguments that the agent code can still override at the call site.</p>
           <p>An empty list disables tools entirely. Removing the section makes every registered tool callable (legacy/permissive mode).</p>
           <dl>
@@ -271,7 +271,7 @@
               <dt>{{ t.name }}</dt><dd>{{ t.description || '—' }}</dd>
             }
           </dl>
-        </evo-help-popover>
+        </draco-help-popover>
       </div>
 
       @if (toolsOpen) {
@@ -284,7 +284,7 @@
            it dismisses the panel without adding anything. -->
       @if (unusedToolNamesCount > 0 && isLoadedConfig) {
         <div class="add-tool-row add-tool-row-top">
-          <evo-select [options]="emptyToolOption"
+          <draco-select [options]="emptyToolOption"
                       [optgroups]="unusedToolOptionGroups"
                       placeholder="+ Add a tool…"
                       [clearOnPick]="true"
@@ -350,4 +350,4 @@
     </div>
   }
 
-</evo-box>
+</draco-box>

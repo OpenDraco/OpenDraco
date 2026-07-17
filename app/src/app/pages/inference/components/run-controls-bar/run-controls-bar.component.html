@@ -1,5 +1,5 @@
 <div class="controls-bar">
-  <evo-select label="Config"
+  <draco-select label="Config"
               [options]="configs"
               [ngModel]="config"
               (ngModelChange)="onConfigChange($event)"
@@ -19,29 +19,29 @@
   <div class="ctrl-sep"></div>
 
   <label class="toggle-row">
-    <evo-switch [ngModel]="showThinking"
+    <draco-switch [ngModel]="showThinking"
                 (ngModelChange)="onShowThinkingChange($event)" />
     Show thinking
   </label>
 
-  <evo-button variant="success"
+  <draco-button variant="success"
               [disabled]="selectionCount === 0 || running"
               (clicked)="run.emit()">
     <ng-icon name="play" /> Run @if (selectionCount > 1) { ({{ selectionCount }}) } @else if (selectionCount === 1) { (1) }
-  </evo-button>
-  <evo-button variant="ghost"
+  </draco-button>
+  <draco-button variant="ghost"
               [disabled]="selectionCount === 0 || running"
               (clicked)="downloadNotebook.emit()"
               title="Download a reproduce-this-run Jupyter notebook for the current selection (run it elsewhere)">
     <ng-icon name="download" /> Notebook
-  </evo-button>
+  </draco-button>
   @if (running) {
-    <evo-button variant="danger" (clicked)="cancel.emit()" title="Cancel the active run">
+    <draco-button variant="danger" (clicked)="cancel.emit()" title="Cancel the active run">
       <ng-icon name="stop" /> Cancel
-    </evo-button>
+    </draco-button>
   } @else if (runInstancesCount > 0) {
-    <evo-button variant="ghost" (clicked)="clearRun.emit()" title="Clear the previous run">
+    <draco-button variant="ghost" (clicked)="clearRun.emit()" title="Clear the previous run">
       <ng-icon name="close" /> Clear
-    </evo-button>
+    </draco-button>
   }
 </div>

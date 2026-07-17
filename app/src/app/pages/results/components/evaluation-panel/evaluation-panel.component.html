@@ -1,12 +1,12 @@
-<evo-box title="Evaluation" [hasActions]="true" class="inner-box">
+<draco-box title="Evaluation" [hasActions]="true" class="inner-box">
   <ng-container box-actions>
-    <evo-button size="sm" [disabled]="!evaluation" (clicked)="downloadZip.emit()"><ng-icon name="download" /> Download (zip)</evo-button>
-    <evo-button size="sm" [disabled]="!evaluation?.summary_path"
+    <draco-button size="sm" [disabled]="!evaluation" (clicked)="downloadZip.emit()"><ng-icon name="download" /> Download (zip)</draco-button>
+    <draco-button size="sm" [disabled]="!evaluation?.summary_path"
                 title="Reveal the cross-model summary JSON in the OS file explorer"
-                (clicked)="reveal.emit(evaluation?.summary_path)"><ng-icon name="folder" /> summary.json</evo-button>
-    <evo-button size="sm" [disabled]="!evaluation?.run_dir"
+                (clicked)="reveal.emit(evaluation?.summary_path)"><ng-icon name="folder" /> summary.json</draco-button>
+    <draco-button size="sm" [disabled]="!evaluation?.run_dir"
                 title="Reveal the run's logs/run_evaluation/<run_id> folder in the OS file explorer"
-                (clicked)="reveal.emit(evaluation?.run_dir)"><ng-icon name="folder" /> run dir</evo-button>
+                (clicked)="reveal.emit(evaluation?.run_dir)"><ng-icon name="folder" /> run dir</draco-button>
   </ng-container>
   @if (!selectedEvalDir) {
     <div class="empty-state">
@@ -48,7 +48,7 @@
 
     <div class="logs-toggle-row">
       <label class="field-label">Show evaluation logs</label>
-      <evo-switch [ngModel]="showLogs" (ngModelChange)="toggleLogs.emit($any($event))" />
+      <draco-switch [ngModel]="showLogs" (ngModelChange)="toggleLogs.emit($any($event))" />
     </div>
 
     @if (showLogs) {
@@ -61,7 +61,7 @@
         <button class="tab" [class.active]="activeLog === 'patch.diff'"       (click)="setActiveLog.emit('patch.diff')">patch.diff</button>
         <button class="tab" [class.active]="activeLog === 'report.json'"      (click)="setActiveLog.emit('report.json')">report.json</button>
         <span class="grow"></span>
-        <evo-button size="sm" [disabled]="!logContent" (clicked)="downloadLog.emit()"><ng-icon name="download" /></evo-button>
+        <draco-button size="sm" [disabled]="!logContent" (clicked)="downloadLog.emit()"><ng-icon name="download" /></draco-button>
       </div>
       <div class="log-view">
         @if (isCustomInstance && activeLog === 'eval.sh') {
@@ -85,4 +85,4 @@
       </div>
     }
   }
-</evo-box>
+</draco-box>

@@ -13,7 +13,7 @@ import {
   AgentBlock, AgentTool, AgentType, AgentVariant, ConfigSummary, ToolDescriptor, UnifiedConfig,
   AGENT_COLORS, AGENT_LABELS, ALL_AGENTS, normalizeNodeBase, suggestNodeId,
 } from '../../models/types';
-import { SelectOption, SelectOptionGroup } from '../../components/select/evo-select.component';
+import { SelectOption, SelectOptionGroup } from '../../components/select/draco-select.component';
 import { findAllCycles } from '../../utils/cycles';
 import { validateConfig as validateConfigPure } from '../../utils/validate-config';
 import {
