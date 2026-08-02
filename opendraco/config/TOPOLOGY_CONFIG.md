@@ -4,6 +4,15 @@ Every OpenDraco run is driven by a single JSON file that defines the graph of
 agents (nodes) and how state flows between them (edges). This document is
 the source-of-truth schema.
 
+That file **is** the topology artifact: configurable (every role, prompt, tool
+whitelist, model, and decoding parameter is a field here), executable (the
+loader compiles it into a LangGraph workflow at run time), and versioned like
+any other file in the repo. Adding an agent, inserting a feedback loop, or
+swapping one structure for another between executions is a JSON edit — never a
+change to framework code. The schema is task-agnostic; the SWE-bench repair
+topologies, the translation pipeline, and the web-search config all use it
+unchanged.
+
 ## Where configs live
 
 ```
@@ -15,7 +24,7 @@ opendraco/config/
 
 | Directory | Purpose | Edit policy |
 |---|---|---|
-| `predefined/` | Reference topologies shipped with OpenDraco (one per upstream multi-agent paper — `agentscope_hybrid`, `experepair_star`, `hyperagent_star`, `joycode_star`, `lingxi_star`, `openhands_star`, `prometheus_tree`). | Treated as read-only by the UI; safe to edit on disk and commit. The "Export config…" button in the Topology page produces a copy in `loaded/` so the predefined original stays untouched. |
+| `predefined/` | Reference topologies shipped with OpenDraco. Repair topologies, mostly one per upstream multi-agent paper (`agentscope_hybrid`, `experepair_star`, `hyperagent_star`, `joycode_star`, `lingxi_star`, `openhands_star`, `prometheus_tree`) plus the plain sequential `chain`; and the non-APR task demos `translate` and `websearch`. | Treated as read-only by the UI; safe to edit on disk and commit. The "Export config…" button in the Topology page produces a copy in `loaded/` so the predefined original stays untouched. |
 | `loaded/` | Working area for user-created or exported configs. Populated by the **Export config…** button or by `POST /api/topology/save`. Empty on a fresh clone — many integration tests should NOT depend on a file being present here. | Free to edit / delete. Files here override `predefined/` when names collide (the loader's `resolve_config_path` walks `predefined/ → loaded/`). |
 | `agent_types/` | Variant catalogs mirroring upstream multi-agent repos (`OpenHands.json`, `joycode-agent.json`, `Lingxi.json`, etc.). Each catalog defines per-agent prompts + tools that a config block can pull in via `"variant": "<RepoId>:<AgentName>"`. | Edit when adding/refreshing a repo variant. Catalog tools have `source_url` fields pointing at the upstream commit — preserve that mirror semantic. |
 

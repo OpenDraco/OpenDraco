@@ -1,7 +1,11 @@
 # Adding a new problem to OpenDraco
 
-OpenDraco is built so that wiring up a brand-new problem type — program
-repair, file translation, math proof checking, whatever — is **three
+OpenDraco's core is task-agnostic: the topology (agents as nodes,
+communication channels as edges) is a configurable artifact compiled
+into a LangGraph workflow, and nothing in the runtime is specific to
+automated program repair — that is simply the instantiation the
+platform is benchmarked on. Wiring up a brand-new problem type — file
+translation, web research, math proof checking, whatever — is **three
 drop-in files**, no edits in framework code. The framework auto-
 discovers what you add.
 
@@ -193,19 +197,34 @@ yours to add — `translate_eval.py` shows a richer schema with a
 
 ---
 
-## End-to-end: the translate demo
+## End-to-end: two worked non-APR tasks
 
-`examples/translate_demo/` puts all three drop-ins together:
+Both shipped demos put all three drop-ins together. Walk through
+whichever is closer in shape to your own problem type.
+
+**Repository translation** — multi-agent, writes files into the
+workspace:
 
 - **Tool**: `opendraco/tools/translate/write_file.py` — one
   `@tool`-decorated function with `workspace_path` sandboxing.
 - **Config**: `opendraco/config/predefined/translate.json` — three
-  `Base agent`s with prompts that read the source/target languages
-  from `instance.problem_statement`.
+  `Base agent`s (locator → translator → reviewer) with prompts that
+  read the source/target languages from `instance.problem_statement`.
 - **Evaluator**: `scripts/evaluation/translate_eval.py` — BLEU vs
   `<file>.gold` sidecars; single-shot manifest.
 
-Walk through it as a template when scaffolding your own problem type.
+**Tool-assisted web search** — the minimal case, one agent and no repo
+at all:
+
+- **Tools**: `opendraco/tools/websearch/` — search/fetch tools instead
+  of repo tools.
+- **Config**: `opendraco/config/predefined/websearch.json` — a single
+  `Base agent` answering a free-form question supplied via `--problem`
+  (CLI) or the inline `problem_statement` of a synthetic instance.
+- **Evaluator**: `scripts/evaluation/websearch_eval.py`.
+
+Neither required a change in `opendraco/`, `api/`, or `app/` — that is
+the property this contract is meant to preserve.
 
 ---
 

@@ -4,7 +4,7 @@
 
 # OpenDraco
 
-**Evolutionary multi-agent framework for [SWE-bench](https://www.swebench.com/)–style automated program repair.**
+**Open-source platform for designing, executing, evaluating, and comparing multi-agent topologies for Software Engineering tasks.**
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -17,7 +17,34 @@
 
 </div>
 
-OpenDraco wires LangGraph multi-agent topologies (locator → patcher → reviewer chains, hubs with conditional dispatch, parallel ensembles) over local Ollama or hosted OpenAI / Gemini models, runs them against SWE-bench instances, and scores the resulting patches through the official Docker harness. A FastAPI backend exposes inference + evaluation as SSE streams; an Angular frontend renders the topology graph, the live tool-call timeline, and a Results page that diffs new runs against archived predictions.
+Large Language Models increasingly power agentic solutions for complex Software Engineering (SE) tasks — program understanding, testing, code review, automated program repair (APR). Multi-agent systems address these tasks by coordinating specialized roles such as planning, code localization, patch generation, and review. Their effectiveness, however, is strongly shaped by the **communication topology**: which agents interact, and how information flows among them.
+
+In existing systems that topology is usually hard-coded into the orchestration logic. Changing an agent, adding a feedback loop, or comparing alternative structures therefore takes substantial implementation effort. That coupling hinders reproducible experimentation and prevents topology from being studied as a design variable — and general-purpose workflow builders, while they simplify agent composition, offer limited support for *designing, executing, evaluating, and comparing* multi-agent architectures on SE tasks.
+
+**OpenDraco turns multi-agent topology into a configurable, executable, and versioned artifact.** You model agents as nodes and communication channels as edges, and configure each agent's role, prompt, tools, model, and decoding parameters. OpenDraco compiles that specification into a [LangGraph](https://www.langchain.com/langgraph) workflow, so agents can be added, replaced, or rewired between executions **without modifying the framework's core implementation**. It supports both local models through [Ollama](https://ollama.com/) and external LLM APIs (OpenAI, Gemini).
+
+A FastAPI backend exposes inference + evaluation as SSE streams; an Angular frontend renders the topology graph, the live tool-call timeline, and a Results page that diffs new runs against archived predictions. The shipped topologies cover the usual structural families — locator → patcher → reviewer chains, hubs with conditional dispatch, hierarchical trees, parallel ensembles.
+
+## Task instantiations
+
+OpenDraco is task-agnostic. A task is defined by three drop-in artifacts — tools, a topology config, and an evaluator — that the framework auto-discovers, with no edits to `opendraco/`, `api/`, or `app/` (see [Extending to a new problem type](#extending-to-a-new-problem-type)). Three instantiations ship with the repo:
+
+| Instantiation | What it does | Ships as |
+|---|---|---|
+| **Automated program repair** — the benchmarked case, see [Benchmark](#benchmark-apr-on-swe-bench) | Runs a topology over SWE-bench instances and scores the emitted patches through the official Docker harness. | 8 predefined topologies (`chain`, `hyperagent_star`, `openhands_star`, `prometheus_tree`, …) + `run_swebench_evaluation.py` / `apply_and_test.py` |
+| **Repository translation** | Locates files in a repo, rewrites them in the target language, reviews the output; graded by BLEU against `.gold` sidecars. | `translate.json` + `opendraco/tools/translate/` + `translate_eval.py` |
+| **Tool-assisted web search** | Answers a free-form question with web-search tools instead of repo tools. | `websearch.json` + `opendraco/tools/websearch/` + `websearch_eval.py` |
+
+The translation and web-search demos exist precisely to show that tasks beyond APR need no changes to the core implementation.
+
+## Benchmark: APR on SWE-bench
+
+APR is the instantiation OpenDraco has been measured on, integrated end-to-end with the [SWE-bench](https://www.swebench.com/) evaluation harness:
+
+- Across **eight topologies** with a fixed local model, the number of resolved synthetic instances ranged from **three to five out of five**, while execution time ranged from **17 to 42 minutes**.
+- On **23 SWE-bench Lite instances**, a sequential topology and a more complex one both resolved **two** issues — but the sequential topology required **39.78% less time** and **47.32% fewer tokens**.
+
+The insight in this setting: **more agents do not necessarily produce better outcomes**, and topology introduces measurable effectiveness–cost trade-offs. Making that variable cheap to change, re-run, and compare is the point of the platform.
 
 ## Quick start
 
@@ -52,6 +79,8 @@ opendraco run instances  --subset lite --split dev --output swebench_instances.j
 opendraco run prediction --instances swebench_instances.jsonl --config hyperagent_star --output opendraco_predictions.jsonl
 opendraco run evaluation --predictions opendraco_predictions.jsonl --subset lite --split dev
 ```
+
+The same three commands drive every task type — swap `--config` for another topology and `--evaluator` / the Evaluation page for the matching scorer. To compare topologies, rerun step 2 with a different `--config` against the same instances file.
 
 ## Prerequisites
 
@@ -214,13 +243,13 @@ Edits are picked up on every `/api/inference/run` call — no API restart needed
 
 ## Extending to a new problem type
 
-OpenDraco auto-discovers tools, topology configs, and evaluator scripts — adding a brand-new problem type (program repair, file translation, math proof checking, etc.) is **three drop-in files**, no edits in framework code:
+Nothing in the framework core is APR-specific. OpenDraco auto-discovers tools, topology configs, and evaluator scripts, so adding a brand-new problem type (program repair, file translation, web research, math proof checking, …) is **three drop-in files**, no edits in framework code:
 
 - a `@tool`-decorated Python module under `opendraco/tools/<bundle>/` (any new tool the agents need — `opendraco/tools/repo/<bundle>/` is reserved for upstream-aligned repo-variant bundles)
 - a topology JSON under `opendraco/config/predefined/` (the agent graph + prompts)
 - an evaluator script under `scripts/evaluation/` (reads a predictions JSONL, writes a SWE-bench-shaped report)
 
-Restart the API, hard-refresh the frontend, and the new tools, the new topology, and the new evaluator all appear in the UI. The end-to-end guide — covering the drop-in shape for each artifact, the optional `OPENDRACO_EVALUATOR` manifest, and the worked translate-task demo as a template — lives in [docs/adding_a_new_problem.md](./docs/adding_a_new_problem.md).
+Restart the API, hard-refresh the frontend, and the new tools, the new topology, and the new evaluator all appear in the UI. The end-to-end guide — covering the drop-in shape for each artifact, the optional `OPENDRACO_EVALUATOR` manifest, and the shipped translate / websearch tasks as worked templates — lives in [docs/adding_a_new_problem.md](./docs/adding_a_new_problem.md).
 
 ## CLI Commands
 
@@ -325,7 +354,7 @@ opendraco status
 
 ## Acknowledgments
 
-OpenDraco builds directly on the [SWE-bench](https://www.swebench.com/) evaluation framework — its Docker harness, dataset format, and `subset/split` semantics are reused verbatim, with custom-row support layered on top for the synthetic-instance flow.
+The APR instantiation builds directly on the [SWE-bench](https://www.swebench.com/) evaluation framework — its Docker harness, dataset format, and `subset/split` semantics are reused verbatim, with custom-row support layered on top for the synthetic-instance flow. The instance/prediction JSONL shape is also what the task-agnostic evaluator contract is modelled on, so non-APR tasks reuse the same pipeline.
 
 The shipped predefined topologies are OpenDraco-authored, but their prompts and tool palettes mirror 22 open-source multi-agent / coding projects (OpenHands, HyperAgent, JoyCode, Lingma SWE-GPT, ExpeRepair, SWE-agent, aider, claude-coder, trae-agent, …). OpenDraco re-implements every tool from scratch against the MCP binding contract — no upstream code is vendored — so the credit covers prompt **design**, tool **naming**, and **intended behaviour**. Two acknowledgement files carry the full provenance with commit-pinned `source_url` deep-links and per-repo license posture:
 
