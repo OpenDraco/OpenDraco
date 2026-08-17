@@ -9,6 +9,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -43,6 +44,83 @@ def _swebench_python() -> str:
         if posix_py.exists():
             return str(posix_py)
     return sys.executable
+
+
+DEFAULT_CACHE_LEVEL = "env"
+
+# `--cache_level` / `--force_rebuild` are upstream SWE-bench flags that some
+# checkouts (including forks vendored under SWE-bench/) simply don't define.
+# run_evaluation.py ends in `main(**vars(args))`, so its parser and main() are
+# in lockstep: a flag absent from --help is absent from the harness entirely,
+# and passing it aborts the run with argparse's exit code 2 before a single
+# container starts. Probe once, forward only what's there.
+_SUPPORTED_FLAGS_CACHE: dict[str, frozenset[str] | None] = {}
+_LONG_OPT_RE = re.compile(r"(?<![\w-])--[A-Za-z][\w-]*")
+
+
+class UnsupportedHarnessFlag(RuntimeError):
+    """Raised when an explicitly-requested flag isn't in this harness."""
+
+
+def _harness_supported_flags(python_bin: str) -> frozenset[str] | None:
+    """Long options this harness accepts, or None if it couldn't be probed."""
+    if python_bin in _SUPPORTED_FLAGS_CACHE:
+        return _SUPPORTED_FLAGS_CACHE[python_bin]
+    flags: frozenset[str] | None = None
+    try:
+        proc = subprocess.run(
+            [python_bin, "-m", "swebench.harness.run_evaluation", "--help"],
+            capture_output=True, text=True, timeout=300, check=False,
+        )
+        if proc.returncode == 0:
+            flags = frozenset(_LONG_OPT_RE.findall(proc.stdout or ""))
+        else:
+            logger.warning(
+                "Probing the SWE-bench harness for supported flags exited %d: %s",
+                proc.returncode, (proc.stderr or "").strip()[:300],
+            )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("Could not probe the SWE-bench harness for supported flags (%s).", exc)
+    _SUPPORTED_FLAGS_CACHE[python_bin] = flags
+    return flags
+
+
+def _cache_flags(
+    supported: frozenset[str] | None,
+    cache_level: str,
+    force_rebuild: bool,
+) -> list[str]:
+    """Image-caching argv for this harness.
+
+    Defaults are dropped when unsupported (the harness's own behaviour is
+    equivalent), but an *explicit* ask is refused rather than ignored —
+    silently reusing a cached image when the caller asked for a clean
+    rebuild would report on a tree they never built.
+    """
+    requested: list[tuple[str, list[str], bool]] = [
+        # (flag, argv, explicitly asked for)
+        ("--cache_level", ["--cache_level", cache_level],
+         cache_level != DEFAULT_CACHE_LEVEL),
+        ("--force_rebuild", ["--force_rebuild", "True"], force_rebuild),
+    ]
+    argv: list[str] = []
+    for flag, flag_argv, explicit in requested:
+        if supported is not None and flag in supported:
+            # --force_rebuild only goes out when actually requested.
+            if flag != "--force_rebuild" or force_rebuild:
+                argv += flag_argv
+        elif explicit:
+            if supported is None:
+                # Unprobeable harness: honour the ask and let it speak for itself.
+                argv += flag_argv
+            else:
+                raise UnsupportedHarnessFlag(
+                    f"this SWE-bench checkout's run_evaluation.py has no {flag} "
+                    f"(its --help lists none), so {' '.join(flag_argv)} would abort "
+                    f"the run. Drop the option, or point SWEBENCH_DIR at a checkout "
+                    f"that supports it."
+                )
+    return argv
 
 
 def _remove_stale_containers(run_id: str) -> None:
@@ -90,10 +168,11 @@ def run_evaluation(
     report_dir: str | None = None,
     subset: str = "lite",
     force: bool = True,
-    cache_level: str = "env",
+    cache_level: str = DEFAULT_CACHE_LEVEL,
     force_rebuild: bool = False,
 ) -> int:
-    """Return the harness subprocess exit code (127 = couldn't spawn it)."""
+    """Return the harness subprocess exit code (127 = couldn't spawn it,
+    2 = we refused to launch it)."""
     _remove_stale_containers(run_id)
     if force:
         _purge_stale_reports(run_id, report_dir)
@@ -110,6 +189,13 @@ def run_evaluation(
         abs_report_dir = str(Path(report_dir).resolve())
         Path(abs_report_dir).mkdir(parents=True, exist_ok=True)
         cwd = abs_report_dir
+    try:
+        cache_argv = _cache_flags(
+            _harness_supported_flags(python_bin), cache_level, force_rebuild,
+        )
+    except UnsupportedHarnessFlag as exc:
+        logger.error("%s", exc)
+        return 2
     cmd = [
         python_bin,
         "-m",
@@ -119,15 +205,15 @@ def run_evaluation(
         "--run_id", run_id,
         "--dataset_name", dataset,
         "--split", split,
-        "--cache_level", cache_level,
+        *cache_argv,
     ]
-    if force_rebuild:
-        cmd += ["--force_rebuild", "True"]
     if abs_report_dir:
         cmd += ["--report_dir", abs_report_dir]
     logger.info(
-        "Running evaluation with %d workers on %s (run_id=%s, dataset=%s, split=%s, force=%s, cache_level=%s, force_rebuild=%s, python=%s, cwd=%s)",
-        max_workers, abs_predictions, run_id, dataset, split, force, cache_level, force_rebuild, python_bin, cwd,
+        "Running evaluation with %d workers on %s (run_id=%s, dataset=%s, split=%s, force=%s, cache_flags=%s, python=%s, cwd=%s)",
+        max_workers, abs_predictions, run_id, dataset, split, force,
+        " ".join(cache_argv) or "none (harness defines no caching flags)",
+        python_bin, cwd,
     )
     try:
         proc = subprocess.run(cmd, cwd=cwd, check=False)
@@ -252,12 +338,14 @@ def main() -> None:
     parser.add_argument(
         "--cache-level",
         choices=["none", "base", "env", "instance"],
-        default="env",
+        default=DEFAULT_CACHE_LEVEL,
         help=(
             "SWE-bench --cache_level pass-through. 'none' wipes every image "
             "(slowest, fully clean); 'env' (default) keeps the environment "
             "image but rebuilds the instance image so the new patch is "
-            "always applied to a fresh container."
+            "always applied to a fresh container. Only forwarded when the "
+            "harness defines the flag; asking for a non-default value on a "
+            "checkout that doesn't is an error, not a silent no-op."
         ),
     )
     parser.add_argument(
@@ -266,7 +354,9 @@ def main() -> None:
         help=(
             "Pass --force_rebuild True to the harness so every docker image "
             "(base, env, instance) is rebuilt from scratch. Use when an "
-            "earlier eval left a corrupted image."
+            "earlier eval left a corrupted image. Errors out if the harness "
+            "has no such flag — a rebuild that didn't happen would leave the "
+            "corrupt image in play."
         ),
     )
     args = parser.parse_args()
