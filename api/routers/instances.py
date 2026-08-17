@@ -29,17 +29,15 @@ def count_instances() -> dict:
 def refresh_all_instances(limit: int | None = None) -> dict:
     """Pull every known SWE-bench (subset, split) pair. Heavy — Full
     alone is ~2000 instances per split."""
-    from scripts.generate_swebench_instances import build_instances
-    combos = [
-        ("lite", "dev"), ("lite", "test"),
-        ("full", "dev"), ("full", "test"), ("full", "train"),
-        ("verified", "test"),
-    ]
+    from scripts import generate_swebench_instances as gen
+    combos = [(subset, split)
+              for subset, splits in gen.SUBSET_SPLITS.items()
+              for split in splits]
     results: dict[str, Any] = {}
     total = 0
     for subset, split in combos:
         try:
-            count = build_instances(
+            count = gen.build_instances(
                 split, str(INSTANCES_PATH), limit,
                 subset=subset, append=True,
             )
@@ -59,13 +57,23 @@ def refresh_instances(
 ) -> dict:
     """Regenerate the JSONL for one (subset, split) pair. With `append=True`
     other pairs already in the file are preserved."""
-    if split not in {"dev", "test", "train"}:
-        raise HTTPException(400, f"split must be 'dev' | 'test' | 'train' (got {split!r})")
-    if subset not in {"lite", "full", "verified"}:
-        raise HTTPException(400, f"subset must be 'lite' | 'full' | 'verified' (got {subset!r})")
-    from scripts.generate_swebench_instances import build_instances
+    from scripts import generate_swebench_instances as gen
+    if subset not in gen.SUBSET_SPLITS:
+        raise HTTPException(
+            400,
+            f"subset must be one of {sorted(gen.SUBSET_SPLITS)} (got {subset!r})",
+        )
+    # Reject per-subset, not against a flat split list: `full` ships no
+    # train split, so a global {'dev','test','train'} check would wave
+    # through a pair HuggingFace can only answer with a download failure.
+    if split not in gen.SUBSET_SPLITS[subset]:
+        raise HTTPException(
+            400,
+            f"subset {subset!r} ships splits {gen.SUBSET_SPLITS[subset]} "
+            f"(got {split!r})",
+        )
     try:
-        count = build_instances(
+        count = gen.build_instances(
             split, str(INSTANCES_PATH), limit,
             subset=subset, append=append,
         )

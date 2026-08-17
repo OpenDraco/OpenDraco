@@ -15,7 +15,7 @@ import {
 } from '../../services/inference-run.service';
 import { InferenceStateService } from '../../services/inference-state.service';
 import {
-  AgentType, Instance, SwebenchSubset, SwebenchSplit,
+  AgentType, Instance, SwebenchSubset, SwebenchSplit, SUBSET_SPLITS,
 } from '../../models/types';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { ICON } from '../../icons';
@@ -206,7 +206,7 @@ export class InferenceComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.refreshing = true;
     this.refreshError = '';
     this.cdr.markForCheck();
-    this.api.refreshInstances(payload.subset, payload.split as 'dev' | 'test' | 'train').subscribe({
+    this.api.refreshInstances(payload.subset, payload.split as 'dev' | 'test').subscribe({
       next: () => { this.refreshing = false; this.loadInstances(); },
       error: err => {
         this.refreshing = false;
@@ -218,7 +218,9 @@ export class InferenceComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   refreshSubset(subset: SwebenchSubset): void {
     if (this.refreshing || subset === 'custom') return;
-    const splits: SwebenchSplit[] = ['dev', 'test', 'train'] as SwebenchSplit[];
+    // Read the shipped matrix rather than a fixed list — asking `verified`
+    // for a dev split (or anything for train) only yields a 400.
+    const splits: SwebenchSplit[] = SUBSET_SPLITS[subset];
     this.refreshing = true;
     this.refreshError = '';
     this.cdr.markForCheck();
@@ -231,7 +233,7 @@ export class InferenceComponent implements OnInit, OnDestroy, AfterViewChecked {
         return;
       }
       const split = splits[idx];
-      this.api.refreshInstances(subset, split as 'dev' | 'test' | 'train').subscribe({
+      this.api.refreshInstances(subset, split as 'dev' | 'test').subscribe({
         next: () => next(idx + 1),
         error: err => {
           failures.push(`${subset}/${split}: ${err?.error?.detail ?? err?.message ?? 'failed'}`);

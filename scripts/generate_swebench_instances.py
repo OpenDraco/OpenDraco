@@ -17,6 +17,17 @@ SUBSET_DATASETS: dict[str, str] = {
     "verified": "SWE-bench/SWE-bench_Verified",
 }
 
+# Splits each repo above actually publishes. Callers that fan out over the
+# matrix (api/routers/instances.py:/refresh-all, the UI's subset refresh)
+# read this so they never ask for a pair HuggingFace can't serve.
+# Note `full` has no train split: the 19k-row train set lives only in the
+# legacy `princeton-nlp/SWE-bench` mirror, not `SWE-bench/SWE-bench`.
+SUBSET_SPLITS: dict[str, list[str]] = {
+    "lite":     ["dev", "test"],
+    "full":     ["dev", "test"],
+    "verified": ["test"],
+}
+
 
 def build_instances(
     split_name: str,

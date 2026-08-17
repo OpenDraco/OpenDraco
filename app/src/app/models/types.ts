@@ -99,13 +99,16 @@ export interface ConfigSummary {
 }
 
 export type SwebenchSubset = 'lite' | 'full' | 'verified' | 'custom';
-export type SwebenchSplit = 'dev' | 'test' | 'train' | 'custom';
+export type SwebenchSplit = 'dev' | 'test' | 'custom';
 
-/** Splits actually shipped per subset on HuggingFace.
- * `custom/custom` hosts user-added GitHub repos. */
+/** Splits actually shipped per subset on HuggingFace — mirrors
+ * `SUBSET_SPLITS` in scripts/generate_swebench_instances.py; keep in sync.
+ * `full` has no train split (that lives only in the legacy
+ * `princeton-nlp/SWE-bench` mirror), and the API rejects any pair absent
+ * here. `custom/custom` hosts user-added GitHub repos. */
 export const SUBSET_SPLITS: Record<SwebenchSubset, SwebenchSplit[]> = {
   lite:     ['dev', 'test'],
-  full:     ['dev', 'test', 'train'],
+  full:     ['dev', 'test'],
   verified: ['test'],
   custom:   ['custom'],
 };

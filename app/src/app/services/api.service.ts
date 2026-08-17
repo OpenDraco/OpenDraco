@@ -209,7 +209,7 @@ export class ApiService {
   // ─── Refresh SWE-bench instances ──────────────────────────────────
   refreshInstances(
     subset: 'lite' | 'full' | 'verified' = 'lite',
-    split: 'dev' | 'test' | 'train' = 'dev',
+    split: 'dev' | 'test' = 'dev',
     limit?: number,
   ): Observable<{ count: number; subset: string; split: string; path: string }> {
     const params = new URLSearchParams({ subset, split, append: 'true' });
