@@ -46,6 +46,42 @@ APR is the instantiation OpenDraco has been measured on, integrated end-to-end w
 
 The insight in this setting: **more agents do not necessarily produce better outcomes**, and topology introduces measurable effectiveness–cost trade-offs. Making that variable cheap to change, re-run, and compare is the point of the platform.
 
+### The five synthetic instances
+
+The "five out of five" above is a difficulty ladder of purpose-built repositories, each seeding exactly one bug with a pytest suite that fails until it's fixed. They exist because SWE-bench Lite instances are slow and coarse for topology comparison: a ladder from *one wrong operator* to *a bug that reads correctly line-by-line* separates topologies that a pass/fail on two Lite issues cannot.
+
+| # | Difficulty | Repo | The seeded bug |
+|---|---|---|---|
+| 1 | Trivial | `EvoMas/evomas-instance-trivial` | `is_even.py` returns `n % 2 == 1` where it should return `n % 2 == 0`. `test_is_even.py` exercises positive, negative and zero inputs. |
+| 2 | Easy | `EvoMas/evomas-instance-easy` | A small calculator module carrying one deliberate arithmetic bug. |
+| 3 | Medium | `EvoMas/evomas-instance-medium` | `rotate.py:rotate_left` slices `arr[n:] + arr[:n]`, which silently breaks once `n >= len(arr)` — `rotate_left([1,2,3], 3)` yields `[]` instead of `[1,2,3]`. One-line fix: normalize with `n = n % len(arr)`. |
+| 4 | Hard | `EvoMas/evomas-instance-hard` | `accumulator.py:accumulate(value, history=[])` — a mutable default argument shared across every call, so state leaks between them. Fix is `history=None` plus an `if history is None` guard. |
+| 5 | Expert | `EvoMas/evomas-instance-expert` | `cleanup.py:remove_negatives` pops from the list it is iterating with `enumerate`, so indices shift and consecutive negatives are skipped. Every line reads correct in isolation; only the output values expose it. |
+
+Each row is a **custom-subset** instance (`subset` = `split` = `custom`) pinned to a `base_commit`, so the ladder is reproducible across runs. Custom rows carry no `test_patch` / `FAIL_TO_PASS`, so the SWE-bench Docker harness can't grade them — score these with **`apply_and_test`** (clone → apply patch → pytest), which is what the Evaluation page selects automatically when every prediction row is custom.
+
+<details>
+<summary>JSONL rows — append to <code>swebench_instances.jsonl</code></summary>
+
+```jsonl
+{"repo": "EvoMas/evomas-instance-trivial", "instance_id": "custom-EvoMas-evomas-instance-trivial-18757fd", "base_commit": "18757fdacb59343425bf22a821a10d8978de7f5d", "problem_statement": "evomas-instance-trivial\nSynthetic SWE-bench instance for EvoMas APR evaluation - trivial difficulty.\n\nA one-function Python module (`is_even.py`) returns the wrong boolean: `n % 2 == 1` should be `n % 2 == 0`. A failing pytest suite (`test_is_even.py`) exercises the bug across positive, negative and zero inputs.", "hints_text": "", "subset": "custom", "split": "custom"}
+{"repo": "EvoMas/evomas-instance-easy", "instance_id": "custom-EvoMas-evomas-instance-easy-fcf59bc", "base_commit": "fcf59bcfe0533b786f1b57e63bfdf1163c6905ed", "problem_statement": "evomas-test-instance\nSynthetic test repository for EvoMas APR evaluation.\n\nContains a simple Python calculator module with a deliberate bug for testing automated program repair.", "hints_text": "", "subset": "custom", "split": "custom"}
+{"repo": "EvoMas/evomas-instance-medium", "instance_id": "custom-EvoMas-evomas-instance-medium-a406a76", "base_commit": "a406a76824b3f74bb4b808a2dc1e7d0aee0f7811", "problem_statement": "evomas-instance-medium\nSynthetic SWE-bench instance for EvoMas APR evaluation - medium difficulty.\n\n`rotate.py:rotate_left(arr, n)` slices the input with `arr[n:] + arr[:n]`. This works for `n < len(arr)` but silently breaks for `n >= len(arr)`: e.g. `rotate_left([1, 2, 3], 3)` returns `[]` instead of `[1, 2, 3]`, and `rotate_left([1, 2, 3], 5)` returns `[]` instead of `[2, 3, 1]`. The fix is one line - normalize `n` modulo the array length before the slice (`n = n % len(arr)`).", "hints_text": "", "subset": "custom", "split": "custom"}
+{"repo": "EvoMas/evomas-instance-hard", "instance_id": "custom-EvoMas-evomas-instance-hard-ad94202", "base_commit": "ad94202ad8c9f02c2521fda1c7181d1c4af027b9", "problem_statement": "evomas-instance-hard\nSynthetic SWE-bench instance for EvoMas APR evaluation - hard difficulty.\n\nClassic Python pitfall: `accumulator.py:accumulate(value, history=[])` uses a mutable default argument, so every call without an explicit `history` shares the same list object. The test `test_independent_default_calls` fails because state leaks across calls. The fix is `history=None` + `if history is None: history = []`.", "hints_text": "", "subset": "custom", "split": "custom"}
+{"repo": "EvoMas/evomas-instance-expert", "instance_id": "custom-EvoMas-evomas-instance-expert-a2e3735", "base_commit": "a2e3735795413732cdd80dc5d0b147e323425748", "problem_statement": "evomas-instance-expert\nSynthetic SWE-bench instance for EvoMas APR evaluation - expert difficulty.\n\n`cleanup.py:remove_negatives` mutates the list while iterating over it: after `items.pop(i)` every subsequent index shifts down by one but `enumerate(items)` keeps marching forward, so consecutive negative values get silently skipped. The function appears correct line-by-line - only the output values reveal the iterator-semantics bug. A correct fix uses a list comprehension, reverse iteration, or builds a new list.", "hints_text": "", "subset": "custom", "split": "custom"}
+```
+
+Or add them one at a time — the Inference page's custom-repo box does the same thing. `--subset` / `--split` are required but ignored in custom mode: the row is always tagged `custom`/`custom`. Omit `--custom-base-commit` to pin the current remote HEAD instead.
+
+```bash
+opendraco run instances --subset lite --split dev --output swebench_instances.jsonl \
+  --custom-repo EvoMas/evomas-instance-trivial \
+  --custom-problem "is_even.py returns n % 2 == 1 where it should return n % 2 == 0." \
+  --custom-base-commit 18757fdacb59343425bf22a821a10d8978de7f5d
+```
+
+</details>
+
 ## Quick start
 
 From a fresh clone to a topology graph in your browser — assumes Python 3.12+, Node 18+, Ollama, and Docker are already installed (see [Prerequisites](#prerequisites)).
