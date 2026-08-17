@@ -14,6 +14,7 @@ from typing import Any
 from opendraco.paths import BASE_DIR as _BASE_DIR
 from opendraco.paths import INSTANCES_PATH as _DEFAULT_INSTANCES_PATH
 from opendraco.paths import PREDICTION_CONFIGS_DIR as _DEFAULT_CONFIGS_DIR
+from opendraco.utils.ollama_preflight import ollama_base_url as _ollama_base_url
 
 
 def resolve_evaluator(stem: str) -> tuple[str, bool]:
@@ -241,10 +242,11 @@ def _build_reproduction_notebook(
             "`~/.opendraco-venv`. As a safety net the first cell also prepends "
             "the venv's site-packages to `sys.path` — so even if the kernel "
             "falls back to a generic Python 3 (different machine, no "
-            "`install.ps1` run), the opendraco imports still resolve. Adjust "
-            "`OLLAMA_BASE_URL` if your Ollama daemon isn't on the default "
-            "host; `SWEBENCH_API_KEY` is only required by the remote-eval "
-            "cell at the bottom.\n"
+            "`install.ps1` run), the opendraco imports still resolve. "
+            "`OLLAMA_BASE_URL` comes pre-filled with the value the "
+            "generating machine ran against — change it only if you're "
+            "reproducing against a different daemon; `SWEBENCH_API_KEY` is "
+            "only required by the remote-eval cell at the bottom.\n"
             "\n"
             "### Picking the kernel in VSCode\n"
             "\n"
@@ -316,7 +318,11 @@ def _build_reproduction_notebook(
             "code. Each assignment **overrides** whatever is in the "
             "environment / .env when the cell runs.\n"
             "\n"
-            "- **`OLLAMA_BASE_URL`** — where the Ollama daemon serves.\n"
+            "- **`OLLAMA_BASE_URL`** — where the Ollama daemon serves. "
+            "Pre-filled from the `opendraco/.env` of the machine that "
+            "generated this notebook, so a run against a remote/LAN GPU "
+            "box reproduces against that same box rather than silently "
+            "falling back to localhost.\n"
             "- **`SWEBENCH_API_KEY`** — required by the remote-eval cell "
             "(section 5) when running `--remote` against sb-cli. Local "
             "Docker harness runs don't need it.\n"
@@ -330,7 +336,11 @@ def _build_reproduction_notebook(
         code(
             "# Edit values here; each assignment overrides the inherited\n"
             "# environment / .env. Uncomment the lines you need.\n"
-            "os.environ['OLLAMA_BASE_URL'] = 'http://localhost:11434'\n"
+            # Baked from the generating process's effective value (i.e.
+            # opendraco/.env) rather than a hardcoded localhost — a
+            # reproduction of a run against a remote daemon has to reach
+            # that same daemon. repr() keeps odd characters syntactic.
+            f"os.environ['OLLAMA_BASE_URL'] = {_ollama_base_url()!r}\n"
             "# os.environ['SWEBENCH_API_KEY'] = 'swb_...'\n"
             "# os.environ['OPENDRACO_INSTANCES'] = '/path/to/swebench_instances.jsonl'\n"
             "# os.environ['GOOGLE_API_KEY']   = '...'\n"
