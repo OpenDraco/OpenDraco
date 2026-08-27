@@ -1,4 +1,5 @@
-import { Component, ElementRef, HostListener, Input, ViewChild, forwardRef } from '@angular/core';
+import { Component, ElementRef, HostListener, Input, ViewChild, forwardRef,
+         booleanAttribute } from '@angular/core';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR, FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 
@@ -105,6 +106,17 @@ export class DracoSelectComponent implements ControlValueAccessor {
    * Default false preserves the stateful behaviour every other
    * caller relies on. */
   @Input() clearOnPick = false;
+  /**
+   * Render the in-DOM panel for a flat option list too.
+   *
+   * The native `<select>` popup is drawn by the browser outside the page, so it
+   * is invisible to screen capture and cannot be themed. Call sites that need
+   * the list to be visible -- or to match the app's own styling -- opt in here
+   * and reuse the grouped panel's markup, positioning and dismiss handling.
+   */
+  // booleanAttribute so a bare `panel` attribute works as well as
+  // [panel]="expr"; without it the attribute form passes the string "".
+  @Input({ transform: booleanAttribute }) panel = false;
   @Input() set options(v: string[] | SelectOption[]) {
     this.normalizedOptions = (v as any[]).map(o =>
       typeof o === 'string' ? { value: o, label: o } : o
@@ -173,7 +185,10 @@ export class DracoSelectComponent implements ControlValueAccessor {
 
   /** True iff at least one group has items — drives the template
    * branch between the custom panel and the native select. */
-  get useGroupedPanel(): boolean { return this.normalizedGroups.length > 0; }
+  get useGroupedPanel(): boolean {
+    return this.normalizedGroups.length > 0
+      || (this.panel && this.normalizedOptions.length > 0);
+  }
 
   onValueChange(v: string): void {
     this.value = v;
