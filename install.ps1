@@ -164,8 +164,44 @@ Write-Host "[install] freezing pinned versions to requirements.txt" -ForegroundC
 # step just publishes the kernelspec under the user's Jupyter data dir
 # (idempotent -- safe to re-run).
 Write-Host "[install] registering 'opendraco' Jupyter kernel" -ForegroundColor Cyan
-& $PythonOpendraco -m ipykernel install --user --name opendraco `
-    --display-name "Python 3 (OpenDraco)" 2>&1 | Out-Null
+# Registering the kernel is a convenience, never a prerequisite -- a notebook
+# still runs once its kernel is picked by hand -- so this step must not be able
+# to abort the install. It used to, on two counts:
+#
+#   * `2>&1` merges the child's stderr into the pipeline, and under Windows
+#     PowerShell 5.1 every stderr line from a native command arrives as a
+#     RemoteException ErrorRecord, which the `$ErrorActionPreference = "Stop"`
+#     at the top of this script promotes to a terminating NativeCommandError.
+#     ipykernel logs its *success* line ("Installed kernelspec ...") to stderr,
+#     so the step aborted the run even when it had worked -- taking the npm
+#     install below and the $PROFILE wrapper after it down with it.
+#   * `| Out-Null` then discarded the message, so a genuine failure left no
+#     traceback to read either.
+#
+# Relaxing the preference locally keeps stderr as data instead of an exception;
+# the exit code decides whether it worked, and the captured output is printed
+# only when it did not.
+$KernelEap = $ErrorActionPreference
+$KernelLog = $null
+$KernelCode = 0
+try {
+    $ErrorActionPreference = "Continue"
+    $KernelLog = & $PythonOpendraco -m ipykernel install --user --name opendraco `
+        --display-name "Python 3 (OpenDraco)" 2>&1
+    $KernelCode = $LASTEXITCODE
+} catch {
+    $KernelCode = 1
+    $KernelLog = $_.Exception.Message
+} finally {
+    $ErrorActionPreference = $KernelEap
+}
+if ($KernelCode -eq 0) {
+    Write-Host "[install] kernel registered: Python 3 (OpenDraco)"
+} else {
+    Write-Host "[install] WARNING: kernel registration failed (exit $KernelCode) -- continuing." -ForegroundColor Yellow
+    Write-Host "        Reproducer notebooks will need their kernel picked by hand." -ForegroundColor Yellow
+    $KernelLog | ForEach-Object { Write-Host "        $_" -ForegroundColor DarkGray }
+}
 
 # --- 4. Install npm deps for the Angular frontend ---------------------------
 # Without this, `npx ng serve` (invoked by `opendraco web` / start_frontend.ps1)
