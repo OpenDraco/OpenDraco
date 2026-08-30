@@ -24,7 +24,7 @@ def _env_cell(monkeypatch: pytest.MonkeyPatch, value: str | None) -> str:
     else:
         monkeypatch.setenv("OLLAMA_BASE_URL", value)
     _, notebook = nb.build_notebook_for_inputs(
-        instance_ids=["custom-OpenDraco-opendraco-instance-trivial-26d5368"],
+        instance_ids=["custom-OpenDraco-opendraco-instance-trivial-410cfc2"],
         config_data=CONFIG,
         evaluator="apply_and_test",
     )
