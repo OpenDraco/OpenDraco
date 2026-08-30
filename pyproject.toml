@@ -31,6 +31,13 @@ dependencies = [
     "ipykernel<7",
     "sb-cli",
     "swebench; sys_platform != 'win32'",
+    # Transitive (langgraph, langsmith, datasets, wandb all require it), capped
+    # here because Windows Smart App Control blocks unsigned native extensions
+    # until they accrue cloud reputation: xxhash 4.0.1 is rejected on such
+    # machines while 4.0.0 and earlier are trusted. A known-good ceiling also
+    # keeps installs reproducible, at the cost of needing a bump to take a
+    # newer release. Inert on Linux and macOS.
+    "xxhash>=3.5.0,<=4.0.0",
 ]
 
 [project.optional-dependencies]
