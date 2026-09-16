@@ -1,0 +1,48 @@
+<div class="controls-bar">
+  <draco-select label="Config"
+              panel
+              [options]="configs"
+              [ngModel]="config"
+              (ngModelChange)="onConfigChange($event)"
+              [disabled]="running" />
+
+  <div class="selected-inst">
+    <span class="ctrl-label">Instances</span>
+    @if (selectionCount === 0) {
+      <span class="inst-chip">none</span>
+    } @else if (selectionCount === 1) {
+      <span class="inst-chip">{{ firstSelected }}</span>
+    } @else {
+      <span class="inst-chip">{{ selectionCount }} selected</span>
+    }
+  </div>
+
+  <div class="ctrl-sep"></div>
+
+  <label class="toggle-row">
+    <draco-switch [ngModel]="showThinking"
+                (ngModelChange)="onShowThinkingChange($event)" />
+    Show thinking
+  </label>
+
+  <draco-button variant="success"
+              [disabled]="selectionCount === 0 || running"
+              (clicked)="run.emit()">
+    <ng-icon name="play" /> Run @if (selectionCount > 1) { ({{ selectionCount }}) } @else if (selectionCount === 1) { (1) }
+  </draco-button>
+  <draco-button variant="ghost"
+              [disabled]="selectionCount === 0 || running"
+              (clicked)="downloadNotebook.emit()"
+              title="Download a reproduce-this-run Jupyter notebook for the current selection (run it elsewhere)">
+    <ng-icon name="download" /> Notebook
+  </draco-button>
+  @if (running) {
+    <draco-button variant="danger" (clicked)="cancel.emit()" title="Cancel the active run">
+      <ng-icon name="stop" /> Cancel
+    </draco-button>
+  } @else if (runInstancesCount > 0) {
+    <draco-button variant="ghost" (clicked)="clearRun.emit()" title="Clear the previous run">
+      <ng-icon name="close" /> Clear
+    </draco-button>
+  }
+</div>

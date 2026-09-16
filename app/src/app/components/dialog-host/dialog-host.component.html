@@ -1,0 +1,66 @@
+<!-- Single host for the app-wide DialogService. Rendered at the root
+     of app.html so any page / service / guard can open a dialog and
+     await the result. Empty state = no `state` → no DOM. -->
+@if (state; as s) {
+  <div class="modal-backdrop"
+       (click)="cancel()"
+       (keydown)="onKeydown($event)"
+       tabindex="-1">
+    <div class="modal-card"
+         (click)="$event.stopPropagation()"
+         role="alertdialog"
+         [attr.aria-labelledby]="'dialog-host-title'">
+      <div class="modal-title"
+           id="dialog-host-title"
+           [class.danger]="s.variant === 'danger' || s.danger">
+        {{ s.title }}
+      </div>
+
+      <div class="modal-body">
+        @if (s.message) {
+          <div class="modal-hint dialog-host-message">{{ s.message }}</div>
+        }
+        @if (s.detail) {
+          <pre class="dialog-host-detail">{{ s.detail }}</pre>
+        }
+
+        @if (s.kind === 'prompt') {
+          @if (s.selectOptions; as opts) {
+            <select #promptInput
+                    class="modal-input"
+                    [(ngModel)]="promptValue">
+              @for (opt of opts; track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          } @else {
+            <input #promptInput
+                   type="text"
+                   class="modal-input"
+                   [placeholder]="s.placeholder || ''"
+                   [(ngModel)]="promptValue"
+                   (keyup.enter)="confirm()" />
+          }
+          @if (promptError) {
+            <div class="modal-error">{{ promptError }}</div>
+          }
+        }
+      </div>
+
+      <div class="modal-actions">
+        @if (s.kind !== 'alert') {
+          <button class="modal-btn" type="button" (click)="cancel()">
+            {{ s.cancelLabel || 'Cancel' }}
+          </button>
+        }
+        <button class="modal-btn primary"
+                [class.danger]="s.danger"
+                type="button"
+                (click)="confirm()"
+                autofocus>
+          {{ s.okLabel }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

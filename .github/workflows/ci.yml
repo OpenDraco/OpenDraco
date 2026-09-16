@@ -1,0 +1,87 @@
+name: CI
+
+# Pull requests and pushes to main. `workflow_dispatch` so a run can be kicked
+# off by hand from the Actions tab without pushing anything.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch cancels the first: the earlier result is
+# already stale, and the Angular install is the slow part of this workflow.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend · py${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject declares requires-python = ">=3.10"; test the floor and the
+        # version the project actually runs on, so a 3.10-incompatible syntax
+        # or stdlib call cannot land unnoticed.
+        python: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the package and its dev extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Test
+        # `integration` needs a live Ollama and `slow` needs real model calls --
+        # neither belongs on a hosted runner. pytest.ini declares both markers.
+        run: pytest -q -m "not integration and not slow"
+
+      - name: CLI smoke test
+        # `opendraco.exe` is a pip-generated launcher shim; invoking the module
+        # directly exercises the same entry point without depending on it.
+        run: python -m opendraco.cli --help
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Angular 21 requires Node 20.19+, 22.12+ or 24+.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install
+        # `npm ci` rather than `npm install`: it honours package-lock.json
+        # exactly, so CI cannot silently resolve a different dependency tree
+        # than the one committed.
+        run: npm ci
+
+      - name: Unit tests
+        # `test:unit` runs vitest once and excludes src/integration/**, which
+        # expects a running API and Ollama.
+        run: npm run test:unit
+
+      - name: Build
+        # A production build catches template and type errors that the unit
+        # tests never import -- most of this app's surface is templates.
+        run: npm run build

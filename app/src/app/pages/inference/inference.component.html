@@ -1,0 +1,108 @@
+<div class="infer-layout">
+  <app-instance-picker-tree
+      [instances]="instances"
+      [instancesTotal]="instancesTotal"
+      [loadingInstances]="loadingInstances"
+      [refreshing]="refreshing"
+      [refreshError]="refreshError"
+      [selectedIds]="state.selectedInstanceIds"
+      [selectionCount]="selectionCount"
+      [openSubsets]="state.openSubsets"
+      [openSplits]="state.openSplits"
+      [search]="instanceSearch"
+      [customFormOpen]="customFormOpen"
+      (searchChange)="instanceSearch = $event"
+      (toggleSubset)="state.toggleSubset($event)"
+      (toggleSplit)="state.toggleSplit($event.subset, $event.split)"
+      (toggleInstance)="state.toggleInstance($event)"
+      (toggleSubsetSelect)="toggleSubsetSelection($event)"
+      (toggleSplitSelect)="toggleSplitSelection($event)"
+      (refreshLeaf)="refreshLeaf($event)"
+      (refreshSubset)="refreshSubset($event)"
+      (refreshAll)="refreshAll()"
+      (selectAllVisible)="selectAllVisible()"
+      (clearSelection)="state.clearSelection()"
+      (toggleCustomForm)="toggleCustomForm()" />
+
+  <div class="main-col">
+    <app-run-controls-bar
+        [config]="config"
+        [configs]="configs"
+        [running]="running"
+        [runInstancesCount]="runInstances.length"
+        [selectionCount]="selectionCount"
+        [firstSelected]="firstSelected"
+        [showThinking]="showThinking"
+        (configChange)="setConfig($event)"
+        (showThinkingChange)="showThinking = $event"
+        (run)="run()"
+        (cancel)="cancel()"
+        (clearRun)="clearRun()"
+        (downloadNotebook)="downloadNotebook()" />
+
+    <!-- Preflight pull panel. Shows while the backend is fetching
+         any Ollama model the config references but the targeted
+         server doesn't have on disk yet. Persists for ~1s after the
+         last pull completes so the user can see the "Pulled" badge,
+         then the agent-event stream takes over below. -->
+    @if (hasActivePulls) {
+      <div class="preflight-panel">
+        <div class="preflight-panel-head">
+          <span class="preflight-panel-title">Preparing models</span>
+          <span class="preflight-panel-sub">
+            Pulling {{ pullingModels.length }} model{{ pullingModels.length === 1 ? '' : 's' }} the run needs…
+          </span>
+        </div>
+        @for (p of pullingModels; track p.model) {
+          <div class="preflight-row"
+               [class.done]="p.done && p.code === 0"
+               [class.failed]="p.done && p.code !== 0">
+            <div class="preflight-row-head">
+              <span class="preflight-model">{{ p.model }}</span>
+              <span class="preflight-status">
+                @if (!p.done) {
+                  <span class="preflight-spinner"><ng-icon name="refresh" /></span> pulling
+                } @else if (p.code === 0) {
+                  <ng-icon name="check" /> pulled
+                } @else {
+                  <ng-icon name="cross" /> failed (exit {{ p.code }})
+                }
+              </span>
+            </div>
+            @if (p.lastLine) {
+              <div class="preflight-line">{{ p.lastLine }}</div>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <app-batch-progress-strip
+        [runInstances]="runInstances"
+        [currentInstance]="currentInstance"
+        [predictionsLogsDir]="predictionsLogsDir"
+        (selectInstance)="selectInstanceInRun($event)" />
+
+    <div class="stream-area" #scrollEl (scroll)="onLogScroll()">
+      <app-inference-instance-view
+          [instance]="currentInstance"
+          [statusMsg]="statusMsg"
+          [running]="currentInstance?.status === 'running'"
+          [cancelled]="cancelled"
+          [showThinking]="showThinking" />
+    </div>
+  </div>
+</div>
+
+<app-custom-repo-modal
+    [open]="customFormOpen"
+    [submitting]="customSubmitting"
+    [repo]="customRepo"
+    [problem]="customProblem"
+    [baseCommit]="customBaseCommit"
+    [error]="customError"
+    (repoChange)="customRepo = $event"
+    (problemChange)="customProblem = $event"
+    (baseCommitChange)="customBaseCommit = $event"
+    (submit)="submitCustomInstance()"
+    (close)="toggleCustomForm()" />

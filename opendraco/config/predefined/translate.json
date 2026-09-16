@@ -1,0 +1,68 @@
+{
+  "id": "translate",
+  "description": "File-translation pipeline: locator finds the target file, translator writes the translated body to disk, reviewer flags untranslated chunks or formatting drift. The runner's `generate_diff_impl(workspace)` picks up the workspace mutation as the final patch — no finalizer needed since there's nothing to assemble. All three agents use the role-less `Base agent` type — prompts and tools come from this JSON, no Python subclassing. Language pair is read from `instance.problem_statement` (e.g. `Translate from English to Spanish`).",
+  "entry": "locator",
+  "end": ["reviewer"],
+  "edges": [
+    { "from": "locator",    "to": "translator" },
+    { "from": "translator", "to": "reviewer" }
+  ],
+  "agents": {
+    "locator": {
+      "class": "Base agent",
+      "model": "ollama/qwen3.5:4b",
+      "think": false,
+      "num_ctx": 4096,
+      "temperature": 0.2,
+      "top_p": 0.9,
+      "num_predict": 256,
+      "stop": ["</files>"],
+      "max_iters": 4,
+      "prompts": {
+        "system": "You locate the single source file the user wants translated. The workspace contains exactly the files that need to be translated; ignore anything whose name ends in `.gold` (those are reference translations and MUST NOT be touched). Use `list_files` and `read_file` to inspect, then emit the absolute path of the file to translate, wrapped in <files>…</files>. Emit nothing else after the closing tag.",
+        "user": "Workspace: {workspace_path}\n\nTask:\n{issue_text}\n\nFind the file to translate. Output:\n<files>\n<absolute path>\n</files>"
+      },
+      "tools": [
+        { "name": "list_files" },
+        { "name": "read_file" }
+      ]
+    },
+    "translator": {
+      "class": "Base agent",
+      "model": "ollama/qwen3.5:4b",
+      "think": true,
+      "num_ctx": 16384,
+      "temperature": 0,
+      "top_p": 0.9,
+      "num_predict": 4096,
+      "stop": [],
+      "max_iters": 8,
+      "prompts": {
+        "system": "You translate prose files between human languages. Read the file path passed from the locator (inside <files>). Read the file content with `read_file`. Translate ALL prose between the source and target languages named in the task. Hard rules:\n- Preserve markdown structure verbatim (headings, lists, code fences, links, tables).\n- DO NOT translate code blocks, inline code, URLs, identifiers, or filenames.\n- DO NOT add commentary, prefaces, or 'here is the translation' framing.\n- Call `write_file(path, content)` ONCE per file. `path` is just the filename (e.g. `intro.md`) -- the tool sandboxes writes to the active workspace automatically. `content` is the FULL translated body.\nAfter the write_file call succeeds, reply with a single confirmation line of the form `Translated <relative-path> from <src> to <tgt>.` -- nothing else.",
+        "user": "Files to translate: {locator}\n\nTask (source/target languages described here):\n{issue_text}"
+      },
+      "tools": [
+        { "name": "read_file" },
+        { "name": "write_file" }
+      ]
+    },
+    "reviewer": {
+      "class": "Base agent",
+      "model": "ollama/qwen3.5:4b",
+      "think": true,
+      "num_ctx": 8192,
+      "temperature": 0,
+      "top_p": 0.9,
+      "num_predict": 1024,
+      "stop": ["</review>"],
+      "max_iters": 4,
+      "prompts": {
+        "system": "Review the translation the translator wrote. Read the modified file with `read_file` (path is in the locator's <files> block). Check three things ONLY:\n1. The whole document is now in the TARGET language (no leftover source-language paragraphs).\n2. Markdown / formatting is intact (no broken code fences, no dropped headings).\n3. Code blocks, URLs, and identifiers were left untranslated.\nIf the translation is acceptable, emit `<review>APPROVED</review>`. If not, list the specific issues inside <review>…</review>. Do not rewrite the file — your job is only to flag.",
+        "user": "Files reviewed: {locator}\n\nTask:\n{issue_text}\n\nWorkspace: {workspace_path}\n\nProduce your review."
+      },
+      "tools": [
+        { "name": "read_file" }
+      ]
+    }
+  }
+}

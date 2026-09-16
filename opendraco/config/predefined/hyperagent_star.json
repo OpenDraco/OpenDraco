@@ -1,0 +1,140 @@
+{
+  "id": "hyperagent_star",
+  "description": "HyperAgent centralized star matching the upstream README: the 4-agent system (Planner / Navigator / Editor / Executor) with `planner` at the hub orchestrating the three worker spokes. `user_proxy` is the terminal sink (acts as the input interface that drains the result). Every node is sourced from the HyperAgent catalog.",
+  "entry": "planner",
+  "end": "finalizer",
+  "edges": [
+    {
+      "from": "planner",
+      "to": "navigator"
+    },
+    {
+      "from": "navigator",
+      "to": "planner"
+    },
+    {
+      "from": "planner",
+      "to": "editor"
+    },
+    {
+      "from": "editor",
+      "to": "planner"
+    },
+    {
+      "from": "planner",
+      "to": "executor"
+    },
+    {
+      "from": "executor",
+      "to": "planner"
+    },
+    {
+      "from": "planner",
+      "to": "finalizer"
+    }
+  ],
+  "agents": {
+    "planner": {
+      "class": "Router",
+      "variant": "HyperAgent:planner",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 2048,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 1024,
+      "stop": [],
+      "max_iters": 1,
+      "prompts": {
+        "system": "You dispatch the next worker in a HyperAgent-flavoured SWE-bench pipeline. Critical path: navigator (Locator — finds source files) -> editor (Patcher — edits/patches code) -> finalizer (emits the workspace diff). `executor` is an optional helper and is never selected here. Answer with EXACTLY ONE word.",
+        "user": "Apply these rules IN ORDER. Stop at the first rule that matches.\n\n1. If `navigator` output is EMPTY -> answer: navigator\n2. If `editor` output is EMPTY -> answer: editor\n3. Otherwise -> answer: finalizer\n\n--- pipeline state (empty between `<<<` and `>>>` means that worker hasn't run yet) ---\nnavigator output:  <<<{navigator}>>>\neditor output:     <<<{editor}>>>\nexecutor output:   <<<{executor}>>>\n--- end state ---\n\nAnswer with one word from: navigator, editor, finalizer."
+      }
+    },
+    "navigator": {
+      "class": "Locator",
+      "variant": "HyperAgent:navigator",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 8192,
+      "stream": true,
+      "temperature": 0.2,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [
+        "</files>"
+      ],
+      "max_iters": 6
+    },
+    "editor": {
+      "class": "Patcher",
+      "variant": "HyperAgent:editor",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 16384,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 2048,
+      "stop": [
+        "</patch>"
+      ],
+      "max_iters": 12,
+      "fallback": {
+        "enabled": true,
+        "guarantee_change": true
+      }
+    },
+    "executor": {
+      "class": "Helper/Proxy",
+      "variant": "HyperAgent:executor",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 4096,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [],
+      "max_iters": 4
+    },
+    "finalizer": {
+      "class": "Helper/Proxy",
+      "variant": "HyperAgent:user_proxy",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 4096,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [],
+      "max_iters": 4
+    }
+  }
+}

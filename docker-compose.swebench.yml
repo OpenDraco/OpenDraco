@@ -1,0 +1,32 @@
+# ============================================================================
+#  Opt-in overlay: local SWE-bench evaluation inside the container.
+#
+#      docker compose -f docker-compose.yml -f docker-compose.swebench.yml up
+#
+#  `opendraco run evaluation --local` and the Evaluation page's harness path
+#  run the official SWE-bench harness, which builds and runs one container per
+#  instance. The api service therefore needs to talk to a Docker daemon. The
+#  `swebench` package and docker-py are already in the image, and the Dockerfile
+#  ships the `docker` client binary; the socket below is the only missing piece.
+#
+#  WHY THIS IS NOT IN THE DEFAULT PROFILE
+#  Mounting the host's docker.sock gives the api container full control of the
+#  host's Docker daemon — it can start privileged containers and mount any host
+#  path, which is root-equivalent access to this machine. That is a fair trade
+#  for a benchmark harness you are running yourself, and a bad default for a
+#  container that executes LLM-authored patches. Opt in per command, above.
+#
+#  Instance containers are siblings on the host daemon, not children of the api
+#  container, so they survive `docker compose down` if a run is interrupted.
+#  run_swebench_evaluation.py clears leftovers by name (sweb.eval.*) at the
+#  start of each run — note it filters on that prefix across the whole daemon,
+#  so it will also remove sweb.eval.* containers you started by hand.
+#
+#  Not needed for: inference, the clone-apply-test evaluator that grades the
+#  synthetic custom instances, or `--remote` (hosted leaderboard via sb-cli).
+# ============================================================================
+
+services:
+  api:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

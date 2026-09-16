@@ -1,0 +1,110 @@
+# ============================================================================
+#  OpenDraco — demo profile
+#
+#      docker compose up
+#      open http://localhost:4200
+#
+#  Brings up the UI, the backend, and a local Ollama, and pulls one model.
+#  Nothing is installed on the host and no Docker socket is mounted: this
+#  profile runs the synthetic instances through the clone-apply-test
+#  evaluator, which needs only git and network access.
+#
+#  The full SWE-bench harness is *not* part of this profile — it starts
+#  containers of its own and therefore needs /var/run/docker.sock mounted
+#  into the api service, which is root-equivalent access on the host.
+#
+#  First run downloads the model (a couple of GB) into the `ollama` volume;
+#  later runs reuse it. Override the model with:
+#      OPENDRACO_MODEL=qwen3.5:9b docker compose up
+#
+#  GPU: Ollama runs on CPU here. For NVIDIA acceleration, install the
+#  container toolkit and add to the ollama service:
+#      deploy: {resources: {reservations: {devices: [{capabilities: [gpu]}]}}}
+# ============================================================================
+name: opendraco
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  # One-shot: pulls the demo model into the shared volume, then exits.
+  model-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: ['ollama pull "${OPENDRACO_MODEL:-qwen3.5:4b}"']
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      target: api
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # The same two files the native install uses, so one place configures
+    # both paths — OLLAMA_BASE_URL, the provider API keys, the LangGraph
+    # revisit budget. `required: false` keeps a fresh clone working before
+    # the .env files have been copied from their .example siblings.
+    #
+    # Precedence: `environment:` below beats env_file, which beats the
+    # image's own ENV. OLLAMA_BASE_URL is deliberately absent below so the
+    # value in opendraco/.env wins; the Dockerfile's ENV supplies the
+    # sibling-service default (http://ollama:11434) when no .env sets it.
+    env_file:
+      - path: ./opendraco/.env
+        required: false
+      - path: ./api/.env
+        required: false
+    environment:
+      # Only RESULTS_DIR is env-configurable (opendraco/paths.py); the
+      # loaded-config dir is a fixed path, so it gets a volume at its
+      # in-image location below.
+      RESULTS_DIR: /data/results
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - results:/data/results
+      - configs:/opendraco/opendraco/config/loaded
+      # bootstrap() migrates <results>/predictions/logs into this dir. Without
+      # a volume it lives on the container layer, which `up` recreates while
+      # the results volume persists — the rename then crosses filesystems and
+      # dies with EXDEV, crash-looping the api on every run after the first.
+      - logs:/opendraco/opendraco/logs
+      # INSTANCES_PATH is a fixed path and is not copied into the image, so
+      # without this the instance list starts empty and anything added
+      # through the UI dies with the container.
+      - ./swebench_instances.jsonl:/opendraco/swebench_instances.jsonl
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: web
+    depends_on:
+      - api
+    ports:
+      - "4200:4200"
+    restart: unless-stopped
+
+volumes:
+  ollama:   # downloaded models
+  results:  # predictions, evaluations, reports
+  configs:  # configurations saved from the UI
+  logs:     # per-run NDJSON SSE logs (powers Inference-page reload-resume)

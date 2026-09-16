@@ -1,0 +1,176 @@
+$ErrorActionPreference = "Stop"
+Set-Location -Path $PSScriptRoot
+
+# Reverse of install.ps1 (Windows). Removes the artefacts install.ps1 creates:
+# the ~\.opendraco-venv, the `opendraco` function in your $PROFILE, the 'opendraco'
+# Jupyter kernel, and app\node_modules. Your data is left alone by default --
+# pass --purge to ALSO delete the SWE-bench clone and the .env files (which
+# hold your API keys). Idempotent: safe to re-run, no-ops on anything gone.
+
+$RepoRoot = $PSScriptRoot
+# Same path install.ps1 / start_api.ps1 / run_tests.py use.
+$VenvDir      = Join-Path $HOME ".opendraco-venv"
+$PythonOpendraco = Join-Path $VenvDir "Scripts\python.exe"
+
+# Markers install.ps1 wraps its profile function in (kept in sync).
+$Marker    = "# >>> opendraco-cli >>>"
+$EndMarker = "# <<< opendraco-cli <<<"
+
+# Delete a directory tree, returning $true/$false instead of throwing so a
+# locked file (e.g. python.exe held by a live process) doesn't abort the whole
+# uninstall. Retries once after clearing read-only attributes that can block
+# deletion.
+function Remove-Tree {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path $Path)) { return $true }
+    try {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        return $true
+    } catch {
+        try {
+            Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue |
+                ForEach-Object { try { $_.Attributes = [IO.FileAttributes]::Normal } catch {} }
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+            return $true
+        } catch {
+            Write-Host "[uninstall] could not remove $Path" -ForegroundColor Red
+            Write-Host "            $($_.Exception.Message)" -ForegroundColor Red
+            return $false
+        }
+    }
+}
+
+$Purge = $false
+$AutoYes = $false
+foreach ($arg in $args) {
+    switch ($arg) {
+        "--purge" { $Purge = $true }
+        "-Purge"  { $Purge = $true }
+        "-y"      { $AutoYes = $true }
+        "--yes"   { $AutoYes = $true }
+        "-Yes"    { $AutoYes = $true }
+        default {
+            if ($arg -in @("-h", "--help", "-Help")) {
+                Write-Host "Usage: .\uninstall.ps1 [--purge] [-y|--yes]"
+                Write-Host "  --purge     also remove the SWE-bench\ clone and opendraco\.env + api\.env (secrets!)"
+                Write-Host "  -y, --yes   skip the confirmation prompt (assume yes)"
+                exit 0
+            }
+            Write-Host "[uninstall] unknown arg: $arg (try --help)" -ForegroundColor Red
+            exit 2
+        }
+    }
+}
+
+# Prompt with a default of YES: empty input (just Enter) proceeds; only an
+# explicit n/no aborts. Bypassed entirely with -y/--yes.
+function Read-YesNo($prompt) {
+    if ($AutoYes) { return $true }
+    $ans = Read-Host "$prompt [Y/n]"
+    if ([string]::IsNullOrWhiteSpace($ans)) { return $true }
+    return ($ans.Trim() -match '^(y|yes)$')
+}
+
+# --- Confirm before removing anything ----------------------------------------
+Write-Host "[uninstall] About to uninstall OpenDraco. This will remove:" -ForegroundColor Cyan
+Write-Host "  - the 'opendraco' Jupyter kernel"
+Write-Host "  - the 'opendraco' function block from your PowerShell profile ($PROFILE)"
+Write-Host "  - app\node_modules"
+Write-Host "  - the venv at $VenvDir"
+if ($Purge) {
+    Write-Host "  - --purge: the SWE-bench\ clone AND opendraco\.env + api\.env (your API keys!)" -ForegroundColor Yellow
+} else {
+    Write-Host "  - KEEPING the SWE-bench\ clone and .env files (pass --purge to remove them too)"
+}
+Write-Host ""
+if (-not (Read-YesNo "Proceed?")) {
+    Write-Host "[uninstall] aborted by user." -ForegroundColor Yellow
+    exit 0
+}
+
+# --- 1. Unregister the Jupyter kernel (before we delete the venv) ------------
+# The kernelspec lives under the user's Jupyter data dir, not inside the venv,
+# so remove it explicitly while the venv's python still exists. Guarded in a
+# try/catch because the venv may not have jupyter (partial/broken install): with
+# $ErrorActionPreference = "Stop", the native command's stderr routed through
+# `2>&1` would otherwise surface as a terminating NativeCommandError and abort
+# the whole uninstall. Missing kernel/jupyter is a no-op, not a failure.
+if (Test-Path $PythonOpendraco) {
+    Write-Host "[uninstall] removing 'opendraco' Jupyter kernel" -ForegroundColor Cyan
+    try {
+        & $PythonOpendraco -m jupyter kernelspec remove -f opendraco 2>&1 | Out-Null
+    } catch {
+        Write-Host "[uninstall] (kernel not registered or jupyter unavailable -- skipping)" -ForegroundColor Cyan
+    }
+}
+
+# --- 2. Strip the opendraco function block from the PowerShell profile ----------
+# Same regex install.ps1 uses to refresh the block, applied here to delete it.
+$ProfilePath = $PROFILE
+if (Test-Path $ProfilePath) {
+    $existing = Get-Content $ProfilePath -Raw -ErrorAction SilentlyContinue
+    if ($existing -and $existing.Contains($Marker)) {
+        Write-Host "[uninstall] removing opendraco function from $ProfilePath" -ForegroundColor Cyan
+        $pattern = "(?ms)" + [regex]::Escape($Marker) + ".*?" + [regex]::Escape($EndMarker)
+        $existing = [regex]::Replace($existing, $pattern, "").TrimEnd()
+        if ($existing) { $existing += "`r`n" }
+        # Guarded: a locked/read-only profile would otherwise throw under
+        # $ErrorActionPreference = "Stop" and skip the venv removal below.
+        try {
+            Set-Content -Path $ProfilePath -Value $existing -Encoding utf8 -ErrorAction Stop
+        } catch {
+            Write-Host "[uninstall] could not rewrite $ProfilePath -- remove the opendraco function block by hand." -ForegroundColor Yellow
+        }
+    }
+}
+
+# --- 3. Remove app\node_modules (regenerated by install.ps1's npm install) ---
+$NodeModules = Join-Path $RepoRoot "app\node_modules"
+if (Test-Path $NodeModules) {
+    Write-Host "[uninstall] removing app\node_modules" -ForegroundColor Cyan
+    [void](Remove-Tree $NodeModules)
+}
+
+# --- 4. Remove the venv ------------------------------------------------------
+if (Test-Path $VenvDir) {
+    Write-Host "[uninstall] removing venv at $VenvDir" -ForegroundColor Cyan
+    if (-not (Remove-Tree $VenvDir)) {
+        Write-Host "[uninstall] the venv is still in use. Close anything running its Python --" -ForegroundColor Yellow
+        Write-Host "            a VSCode/Jupyter 'Python 3 (OpenDraco)' kernel, a running 'opendraco api'," -ForegroundColor Yellow
+        Write-Host "            or an activated venv shell -- then re-run .\uninstall.ps1." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[uninstall] no venv at $VenvDir (already gone)" -ForegroundColor Cyan
+}
+
+# --- 5. --purge extras (SWE-bench clone + .env secrets) ----------------------
+if ($Purge) {
+    $SwebenchDir = Join-Path $RepoRoot "SWE-bench"
+    if (Test-Path $SwebenchDir) {
+        Write-Host "[uninstall] --purge: removing SWE-bench clone at $SwebenchDir" -ForegroundColor Yellow
+        try {
+            Remove-Item -Recurse -Force $SwebenchDir -ErrorAction Stop
+        } catch {
+            # A WSL-built harness venv contains symlinks into the Linux
+            # filesystem that Windows can't delete. Fall back to WSL.
+            Write-Host "[uninstall] Windows couldn't remove it (likely WSL symlinks in venv/)." -ForegroundColor Yellow
+            Write-Host "            Remove it from WSL: wsl -- rm -rf '$($SwebenchDir -replace '\\','/')'"
+        }
+    }
+    foreach ($envFile in @((Join-Path $RepoRoot "opendraco\.env"), (Join-Path $RepoRoot "api\.env"))) {
+        if (Test-Path $envFile) {
+            Write-Host "[uninstall] --purge: removing $envFile (held your secrets)" -ForegroundColor Yellow
+            try {
+                Remove-Item -Force $envFile -ErrorAction Stop
+            } catch {
+                Write-Host "[uninstall] could not remove $envFile ($($_.Exception.Message)) -- delete it by hand." -ForegroundColor Yellow
+            }
+        }
+    }
+} else {
+    Write-Host "[uninstall] kept SWE-bench\ and the .env files -- pass --purge to remove them too." -ForegroundColor Cyan
+}
+
+Write-Host ""
+Write-Host "[uninstall] done. Open a fresh PowerShell window so the removed opendraco" -ForegroundColor Green
+Write-Host "            function clears from your current session."

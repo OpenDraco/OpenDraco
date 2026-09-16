@@ -1,0 +1,22 @@
+@if (runInstances.length > 0) {
+  <div class="batch-progress">
+    @for (inst of runInstances; track inst.instance_id) {
+      <button type="button"
+              class="bp-item"
+              [class]="'bp-' + inst.status"
+              [class.active]="currentInstance?.instance_id === inst.instance_id"
+              [title]="inst.instance_id + ' — ' + inst.status + (inst.runId ? ' — log: prediction-' + inst.runId + '.log' : '')"
+              (click)="onClick($event, inst.instance_id)">
+        <span class="bp-dot"></span>
+        <span class="bp-id">{{ inst.instance_id }}</span>
+        @if (inst.runId) {
+          <span class="bp-runid" [title]="'Prediction ID: ' + inst.runId">{{ inst.runId }}</span>
+          <span class="bp-logname"
+                [title]="'User-facing text log: ' + predictionsLogsDir + '/prediction-' + inst.runId + '.log'">
+            prediction-{{ inst.runId }}.log
+          </span>
+        }
+      </button>
+    }
+  </div>
+}

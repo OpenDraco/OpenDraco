@@ -1,0 +1,282 @@
+/* Host flows inside the parent's center column. */
+:host { display: contents; }
+
+/* ─── Toolbar ────────────────────────────────────────────── */
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+}
+.topo-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.toolbar-sep { flex: 1; }
+
+/* Stats chip group: agents / edges / cycles / DAG-or-cyclic flag.
+ * Sits just after the title/status chips on the left side of the
+ * toolbar. Each stat is muted by default; the cycle counter goes
+ * warm-yellow when > 0 so the user can spot a cyclic topology at
+ * a glance without reading the numeric value. */
+.topo-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 6px;
+  padding: 2px 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.topo-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.topo-stat.warn { color: var(--warning, #e3b341); }
+.topo-stat-unit { color: var(--text-muted); font-size: 10px; }
+
+/* Toolbar button labels split into an icon element + a text span so
+ * the cramped-mode rule below can hide the text without losing the
+ * icon. A small gap keeps them visually paired. Icons render via
+ * `<ng-icon>` which inlines an SVG; sizing it as a font-relative
+ * square keeps it visually balanced with the text label. */
+.btn-icon  {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1;
+  vertical-align: middle;
+}
+.btn-label { margin-left: 4px; }
+
+/* Cramped mode kicks in when BOTH side rails are open at once (the
+ * left config rail AND the right inspector). In that layout the
+ * toolbar runs out of horizontal room and labels start clipping; we
+ * collapse the buttons to icon-only so they all stay clickable. The
+ * `title=` attribute on every button keeps full text discoverable on
+ * hover. */
+.graph-toolbar.toolbar-cramped .btn-label { display: none; }
+/* Hide the stats and config-name pill in cramped mode too so the
+ * remaining horizontal room goes to the action buttons. The stats
+ * cluster is the next-biggest space consumer after the labels. */
+.graph-toolbar.toolbar-cramped .topo-stats { display: none; }
+.graph-toolbar.toolbar-cramped .topo-title {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Width-driven degradation. The `toolbar-cramped` flag above only fires
+ * when BOTH rails are open, so it misses the common 1366×768 case (one
+ * rail open, or a loaded config whose extra Save/History buttons don't
+ * fit). These container queries react to the REAL width the center column
+ * gives the toolbar — shedding the stats cluster first, then collapsing
+ * the button text to icons — so nothing clips off the right edge. The
+ * `topoCenter` container is declared on `.center-col` in
+ * topology.component.css. */
+@container topoCenter (max-width: 1380px) {
+  .graph-toolbar .topo-stats { display: none; }
+}
+@container topoCenter (max-width: 1240px) {
+  .graph-toolbar .btn-label { display: none; }
+  .graph-toolbar .topo-title {
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Thin vertical divider between toolbar button groups (Edit / Validate /
+ * Save / View). Doesn't flex-grow -- visual grouping only. */
+.toolbar-group-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ─── Topology legend popover (toolbar help button) ─────── */
+/* Widens the popover panel only when it hosts the edge-types legend
+ * (other help-popovers on this page keep their narrower default). */
+:host ::ng-deep .hp-pop:has(.edge-legend) {
+  width: 460px;
+  max-width: 90vw;
+}
+.edge-legend {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text);
+  max-height: 65vh;
+  overflow: auto;
+  box-sizing: border-box;
+}
+.edge-legend code {
+  background: var(--bg-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10.5px;
+}
+.edge-legend .legend-section-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-muted);
+  font-size: 10px;
+  margin: 12px 0 6px;
+}
+.edge-legend .legend-section-title:first-child { margin-top: 0; }
+.edge-legend .legend-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.edge-legend .legend-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.edge-legend .legend-swatch {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.edge-legend .legend-text { flex: 1 1 auto; min-width: 0; }
+.edge-legend .legend-name {
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.edge-legend .legend-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(163, 113, 247, .15);
+  color: #a371f7;
+  border: 1px solid rgba(163, 113, 247, .4);
+}
+.edge-legend .legend-desc {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.edge-legend .legend-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+}
+.edge-legend .legend-block strong { color: var(--text); font-weight: 700; }
+
+/* ─── Toolbar read-only chip (predefined configs) ─────────── */
+.readonly-chip {
+  display: inline-flex; align-items: center;
+  margin-left: 10px;
+  padding: 2px 9px;
+  background: rgba(227,179,65,.12);
+  border: 1px solid #e3b341;
+  color: #e3b341;
+  border-radius: 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+/* Loaded-config sibling of the read-only chip: shown when the active config
+ * has in-memory edits that haven't been written to disk. Reset on Save and
+ * on config switch (TopologyStateService.setCurrentConfig). */
+.unsaved-chip {
+  display: inline-flex; align-items: center;
+  margin-left: 10px;
+  padding: 2px 9px;
+  background: rgba(240,136,62,.14);
+  border: 1px solid #f0883e;
+  color: #f0883e;
+  border-radius: 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+/* Sibling chip to `.unsaved-chip`: shown after any edit to the
+ * topology until the user clicks Validate. Warn-yellow accent so the
+ * two chips read as distinct when both are present. Gates the Save
+ * button (see [disabled] binding in the template). */
+.unvalidated-chip {
+  display: inline-flex; align-items: center;
+  margin-left: 8px;
+  padding: 2px 9px;
+  background: rgba(227,179,65,.14);
+  border: 1px solid rgba(227,179,65,.85);
+  color: var(--warn);
+  border-radius: 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+/* ─── Validation panel (Validate button + pre-Save block) ──── */
+/* Validation panel: warning, not blocking. Save proceeds regardless. */
+.validation-panel {
+  margin: 6px 0;
+  padding: 8px 10px;
+  /* Default = error flavour (graph won't compile). Warning flavour
+     (graph compiles but worth eyeballing) overrides via the
+     `.validation-panel-warn` modifier below. */
+  background: rgba(248, 81, 73, 0.10);
+  border: 1px solid var(--danger, #f85149);
+  border-radius: 6px;
+  color: var(--danger, #f85149);
+  font-size: 12px;
+}
+.validation-panel.validation-panel-warn {
+  background: rgba(227, 179, 65, 0.10);
+  border-color: var(--warn, #e3b341);
+  color: var(--warn, #e3b341);
+}
+.validation-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.validation-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--warn, #e3b341);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.validation-dismiss:hover { opacity: 0.7; }
+.validation-note {
+  margin: 2px 0 6px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+.validation-list {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+.validation-list li { margin: 1px 0; }

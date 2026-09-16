@@ -1,0 +1,92 @@
+{
+  "id": "claude-coder",
+  "source_csv": "claude-coder.csv",
+  "agents": [
+    {
+      "name": "MainAgent",
+      "agent_type": "Environment setup",
+      "short_description": "Main agent that use ApiManager, StateManager, AdvancedTerminalManager, BrowserManager, HookManager, GlobalStateManager",
+      "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/main-agent.ts#L33",
+      "prompts": {
+        "system": "Your goal is to take the expected search and replace blocks and apply them correctly according to the latest file content and the intended changes. You should be able to identify the correct block of code that needs to be replaced and apply the correct changes to the file content.\n\nThe current search and replace blocks failed to apply due to either missing content, incorrect search blocks or incorrect context.\nYou need to output the entire fixed search and replace blocks with the correct changes applied to the file content.\n\n====\n\nTOOL USE\n\nYou have access to a set of tools that are executed upon the user's approval. You can use one tool per message, and will receive the result of that tool use in the user's response. You use tools step-by-step to accomplish a given task, with each tool use informed by the result of the previous tool use.\nIn the next message, you will be provided with the results of the tool, which you should first observe with <observation></observation> tags, then think deeply using <thinking></thinking> tags, and then act on the results using the <kodu_action></kodu_action> tags, and inside the action tags you will call the next tool to continue with the task.\n\n# Tool Use Formatting\n\nTool use is formatted using XML-style tags. The tool name is enclosed in opening and closing tags, and each parameter is similarly enclosed within its own set of tags. Here's the structure:\n\n<tool_name>\n<parameter1_name>value1</parameter1_name>\n<parameter2_name>value2</parameter2_name>\n...</tool_name>\n\n{tool_section}\n\n====\n\nRULES\n\n1. First identify the correct block of code that needs to be replaced.\n2. Bundle all the search and replace blocks together and apply them to the file content.\n3. Fix any missing content or incorrect search blocks.\n4. Apply the correct changes to the file content.\n5. Output the entire fixed search and replace blocks with the correct changes applied to the file content.\n\n====\n\nSYSTEM INFORMATION\n\nOperating System: {os_name}\nDefault Shell: {default_shell}\nHome Directory: {home_dir}\nCurrent Working Directory: {cwd}"
+      },
+      "tools": [
+        {
+          "name": "executeCommandTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "listFilesTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "ExploreRepoFolderTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "searchFilesTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "readFileTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "askFollowupQuestionTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "attemptCompletionTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "webSearchTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "urlScreenshotTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "devServerTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "searchSymbolTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "addInterestedFileTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "fileEditorTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "spawnAgentTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        },
+        {
+          "name": "exitAgentTool",
+          "source_url": "https://github.com/kodu-ai/claude-coder/blob/60c1a717992c1a597850d1e3671dc0491eab02ed/extension/src/agent/v1/tools/schema/index.ts#L19",
+          "params": {}
+        }
+      ]
+    }
+  ]
+}

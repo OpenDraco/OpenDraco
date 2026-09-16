@@ -1,0 +1,27 @@
+# Keep the build context small: 34 MB of results and a vendored SWE-bench
+# checkout have no business being sent to the daemon.
+.git
+.gitignore
+# Config, not image content: the api service mounts these via `env_file`, so
+# baking them in would freeze one machine's settings into the image — and
+# write any API key in them into a layer anyone with the image can read.
+**/.env
+# Bind-mounted into the api service at its fixed INSTANCES_PATH, never COPYed,
+# so shipping 70+ MB to the daemon on every build buys nothing.
+swebench_instances.jsonl
+**/node_modules
+**/__pycache__
+**/*.pyc
+*.egg-info
+.venv
+venv
+SWE-bench
+results
+logs
+video
+docs
+opendraco/logs
+app/dist
+app/.angular
+_build
+*.log

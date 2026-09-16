@@ -1,0 +1,301 @@
+#!/usr/bin/env bash
+# Linux / macOS counterpart of install.ps1.
+# Behaviour mirrors the PowerShell script: non-destructive venv reuse,
+# `pip install -e "."`, regenerated requirements.txt lockfile, and
+# an idempotent `opendraco` function appended to the user's shell rc.
+set -euo pipefail
+
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Venv lives in the user's home (`~/.opendraco-venv`) so the repo stays
+# free of build artefacts and the same env can be shared across multiple
+# checkouts of the repo. start_api.sh + the rc-function appended below
+# both reference the same path.
+VENV_DIR="$HOME/.opendraco-venv"
+PYTHON_OPENDRACO="$VENV_DIR/bin/python"
+OPENDRACO_EXE="$VENV_DIR/bin/opendraco"
+
+# ── Arg parsing ───────────────────────────────────────────────────────────────
+# -y / --yes skips the confirmation prompt (automated / CI runs).
+AUTO_YES=0
+for arg in "$@"; do
+    case "$arg" in
+        -y|--yes) AUTO_YES=1 ;;
+        -h|--help)
+            echo "Usage: bash install.sh [-y|--yes]"
+            echo "  -y, --yes   skip the confirmation prompt (assume yes)"
+            exit 0 ;;
+        *) echo "[install] unknown arg: $arg (try --help)" >&2; exit 2 ;;
+    esac
+done
+
+# Prompt with a default of YES: empty input (just Enter) proceeds; only an
+# explicit n/no aborts. Bypassed entirely with -y/--yes. Guard `read` so an
+# EOF (non-interactive stdin) doesn't trip `set -e`; empty reply -> yes.
+confirm() {
+    [ "$AUTO_YES" = 1 ] && return 0
+    printf '%s [Y/n] ' "$1"
+    local reply=""
+    read -r reply || reply=""
+    case "$reply" in
+        ""|[yY]|[yY][eE][sS]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Prefer python3 over python (Linux/macOS convention).
+PYTHON_BIN="$(command -v python3 || command -v python || true)"
+if [ -z "$PYTHON_BIN" ]; then
+    echo "[install] python3 not found -- install Python 3.10+ first" >&2
+    echo "        https://www.python.org/downloads/  (3.12.6 is the dev baseline)" >&2
+    exit 1
+fi
+
+test_cli() {
+    local name="$1"; local hint="$2"
+    if command -v "$name" >/dev/null 2>&1; then
+        echo "[install] found $name -> $(command -v "$name")"
+        return 0
+    fi
+    echo "[install] missing prerequisite: $name"
+    echo "        $hint"
+    return 1
+}
+
+# ── 1. Prerequisite checks ────────────────────────────────────────────────────
+echo "[install] checking prerequisites"
+echo "[install] python -> $PYTHON_BIN"
+ollama_ok=0; test_cli ollama "Install Ollama from https://ollama.com/download." && ollama_ok=1 || true
+docker_ok=0; test_cli docker "Install Docker (Desktop on macOS) from https://www.docker.com/products/docker-desktop/ (required for default 'opendraco run evaluation --local')." && docker_ok=1 || true
+npm_ok=0;    test_cli npm    "Install Node.js 18+ from https://nodejs.org/ (needed for the Angular frontend)." && npm_ok=1 || true
+
+# Only python is mandatory (the check above aborts if it's missing). Ollama,
+# Docker and Node are feature-gated -- warn and continue so an inference-only
+# or CLI-only install still succeeds.
+[ "$ollama_ok" = 0 ] && echo "[install] continuing without ollama -- only needed for local models; 'opendraco ollama *' + ollama/* agents will fail until you install it."
+[ "$docker_ok" = 0 ] && echo "[install] continuing without docker -- only needed for local SWE-bench eval; 'opendraco run evaluation' (default --local) will fail; pass --remote to use sb-cli instead."
+[ "$npm_ok" = 0 ]    && echo "[install] continuing without npm -- only needed for the Angular frontend; 'opendraco web' will fail until you install Node.js."
+
+# ── 1b. Confirm before making changes ─────────────────────────────────────────
+# Summarise exactly what this run will do, reflecting the prerequisite results
+# above (feature-gated steps show as SKIP when their tool is missing).
+echo
+echo "[install] About to install OpenDraco. This will:"
+if [ -d "$VENV_DIR" ]; then
+    echo "  - reuse the existing Python venv at $VENV_DIR"
+else
+    echo "  - create a Python venv at $VENV_DIR"
+fi
+echo "  - pip install -e '.[dev]' (OpenDraco + pinned deps + dev extras), then freeze requirements.txt"
+echo "  - register an 'opendraco' Jupyter kernel ('Python 3 (OpenDraco)')"
+echo "  - add an 'opendraco' function to your shell startup file (~/.bashrc, ~/.zshrc, ...)"
+if [ "$npm_ok" = 1 ]; then
+    echo "  - run 'npm install' in app/ (Angular CLI + frontend deps)"
+else
+    echo "  - SKIP the frontend npm install (npm not found)"
+fi
+if [ "$docker_ok" = 1 ]; then
+    echo "  - clone SWE-bench and build its harness venv"
+else
+    echo "  - SKIP the SWE-bench harness (needs Docker)"
+fi
+echo "  - create opendraco/.env and api/.env from examples if missing (never overwrites)"
+echo
+if ! confirm "[install] Proceed?"; then
+    echo "[install] aborted by user."
+    exit 0
+fi
+
+# ── 2. Ensure the venv exists ────────────────────────────────────────────────
+# Non-destructive: never delete an existing venv. If something is broken,
+# remove it yourself (`rm -rf "$VENV_DIR"`) and re-run setup -- see the
+# troubleshooting section in README.md.
+if [ -d "$VENV_DIR" ]; then
+    echo "[install] reusing existing venv at $VENV_DIR (pass through pip resolves any drift)"
+else
+    echo "[install] creating venv at $VENV_DIR"
+    "$PYTHON_BIN" -m venv "$VENV_DIR"
+fi
+
+echo "[install] upgrading pip + wheel"
+"$PYTHON_OPENDRACO" -m pip install --upgrade pip wheel
+
+# ── 3. Install the project ───────────────────────────────────────────────────
+# `-e "."` reads pyproject.toml; deps are pinned there and an `opendraco`
+# console script is registered against `opendraco.cli:main`.
+echo "[install] installing opendraco (editable) + dependencies + dev extras"
+"$PYTHON_OPENDRACO" -m pip install -e ".[dev]"
+
+# Snapshot exact resolved versions to requirements.txt for reproducibility /
+# recovery if a downstream package ships a breaking release. pyproject.toml
+# stays the canonical input; this file is a regenerated lockfile.
+echo "[install] freezing pinned versions to requirements.txt"
+"$PYTHON_OPENDRACO" -m pip freeze > "$REPO_ROOT/requirements.txt"
+
+# ── 3b. Register the venv as a Jupyter kernel ────────────────────────────────
+# The "reproduce-this-run" notebook exported from the Results page sets
+# `kernelspec.name = "opendraco"` so opening it in Jupyter / VSCode auto-picks
+# this interpreter without the user having to hunt through the kernel
+# dropdown. `ipykernel` itself ships via the pip install above; this
+# step just publishes the kernelspec under the user's Jupyter data dir
+# (idempotent -- safe to re-run).
+echo "[install] registering 'opendraco' Jupyter kernel"
+"$PYTHON_OPENDRACO" -m ipykernel install --user --name opendraco \
+    --display-name "Python 3 (OpenDraco)" >/dev/null 2>&1 || \
+    echo "[install] warning: ipykernel registration failed (notebooks will fall back to a generic Python 3 kernel)"
+
+# ── 4. Install npm deps for the Angular frontend ─────────────────────────────
+# Without this, `npx ng serve` (invoked by `opendraco web` / start_frontend.sh)
+# resolves `ng` against the global npm registry, fetches a wrong package,
+# and exits with "could not determine executable to run". Running `npm
+# install` populates app/node_modules so npx finds the Angular CLI locally.
+if [ "$npm_ok" = 1 ]; then
+    echo "[install] installing app/ npm dependencies (Angular CLI + project deps)"
+    (cd "$REPO_ROOT/app" && npm install --no-audit --no-fund)
+else
+    echo "[install] skipping npm install -- node/npm not available."
+fi
+
+# ── 5. Shell-rc opendraco function ──────────────────────────────────────────────
+# pip install -e . registers `opendraco` inside the venv's bin/. To call it
+# from anywhere without activating the venv, append a function to the
+# user's shell rc that delegates to the venv binary.
+detect_shell_rc() {
+    case "${SHELL:-}" in
+        */zsh)  echo "$HOME/.zshrc" ;;
+        */bash) [ -f "$HOME/.bashrc" ] && echo "$HOME/.bashrc" || echo "$HOME/.bash_profile" ;;
+        */fish) echo "$HOME/.config/fish/config.fish" ;;
+        *)      echo "$HOME/.profile" ;;
+    esac
+}
+
+RC_PATH="$(detect_shell_rc)"
+MARKER="# >>> opendraco-cli >>>"
+END_MARKER="# <<< opendraco-cli <<<"
+
+mkdir -p "$(dirname "$RC_PATH")"
+[ ! -f "$RC_PATH" ] && touch "$RC_PATH"
+
+# Strip any previous block between markers (re-runs replace, never stack).
+# Substring match (`index() > 0`), not `$0 == s`, because earlier versions of
+# this script appended without a leading newline -- if the rc file didn't
+# end with a newline the start marker got concatenated onto the existing
+# last line (e.g. `. ~/.bashrc-extras# >>> opendraco-cli >>>`). The robust
+# pass below preserves any text before the start marker on its line and
+# any text after the end marker on its line, so even a malformed previous
+# injection is cleaned up correctly.
+if grep -qF "$MARKER" "$RC_PATH"; then
+    echo "[install] refreshing existing opendraco function in $RC_PATH"
+    awk -v s="$MARKER" -v e="$END_MARKER" '
+        BEGIN { skip = 0 }
+        {
+            spos = index($0, s)
+            if (spos > 0) {
+                if (!skip && spos > 1) print substr($0, 1, spos - 1)
+                skip = 1
+                next
+            }
+            if (skip) {
+                epos = index($0, e)
+                if (epos > 0) {
+                    skip = 0
+                    rest = substr($0, epos + length(e))
+                    if (rest != "") print rest
+                }
+                next
+            }
+            print
+        }
+    ' "$RC_PATH" > "$RC_PATH.tmp" && mv "$RC_PATH.tmp" "$RC_PATH"
+fi
+
+# Ensure the rc file ends with a newline so the heredoc below appends on a
+# fresh line instead of being concatenated onto an existing one.
+if [ -s "$RC_PATH" ] && [ -n "$(tail -c1 "$RC_PATH")" ]; then
+    printf '\n' >> "$RC_PATH"
+fi
+
+# Append fresh block. Fish uses different function syntax; everything else
+# is POSIX-ish.
+if [[ "$RC_PATH" == *fish* ]]; then
+    cat >> "$RC_PATH" <<EOF
+$MARKER
+function opendraco
+    "$OPENDRACO_EXE" \$argv
+end
+$END_MARKER
+EOF
+else
+    cat >> "$RC_PATH" <<EOF
+$MARKER
+opendraco() {
+    "$OPENDRACO_EXE" "\$@"
+}
+$END_MARKER
+EOF
+fi
+echo "[install] appended opendraco function to $RC_PATH"
+
+# ── 6. Set up the SWE-bench harness (local evaluation only) ──────────────────
+# `opendraco run evaluation` defaults to --local, which drives the official
+# SWE-bench Docker harness. That harness is NOT a pip dependency; it lives in a
+# sibling clone at <repo>/SWE-bench with its own venv. It's only usable when
+# Docker is present (the harness runs each instance in a container), so we gate
+# the whole clone+build behind the Docker check -- no point setting it up on a
+# box that can't run it.
+SWEBENCH_DIR="$REPO_ROOT/SWE-bench"
+if [ "$docker_ok" = 0 ]; then
+    echo "[install] skipping SWE-bench harness setup -- local eval needs Docker."
+    echo "          Install Docker and rerun install.sh (or set it up manually -- see README 'SWE-bench harness')."
+else
+    # Clone (idempotent -- skipped if the dir already exists).
+    if [ -d "$SWEBENCH_DIR" ]; then
+        echo "[install] SWE-bench clone already present at $SWEBENCH_DIR (leaving as-is)"
+    else
+        echo "[install] cloning SWE-bench harness into $SWEBENCH_DIR"
+        git clone https://github.com/SWE-bench/SWE-bench.git "$SWEBENCH_DIR" || \
+            echo "[install] warning: SWE-bench clone failed -- 'opendraco run evaluation --local' will not work until you clone it manually."
+    fi
+    # Build the harness venv (idempotent -- skipped if already built).
+    if [ -d "$SWEBENCH_DIR" ]; then
+        if [ -x "$SWEBENCH_DIR/venv/bin/python" ]; then
+            echo "[install] SWE-bench venv already built at $SWEBENCH_DIR/venv (leaving as-is)"
+        else
+            echo "[install] building SWE-bench harness venv at $SWEBENCH_DIR/venv"
+            if "$PYTHON_BIN" -m venv "$SWEBENCH_DIR/venv" && \
+               "$SWEBENCH_DIR/venv/bin/pip" install -e "$SWEBENCH_DIR"; then
+                echo "[install] SWE-bench harness venv ready"
+            else
+                echo "[install] warning: SWE-bench venv build failed -- build it manually before local eval:"
+                echo "          cd SWE-bench && python3 -m venv venv && source venv/bin/activate && pip install -e ."
+            fi
+        fi
+    fi
+fi
+
+# ── 7. .env scaffolding ──────────────────────────────────────────────────────
+# Copy the example env files into place (non-destructive: never clobber an
+# existing .env). Fill in OLLAMA_BASE_URL etc. afterwards -- see README.
+if [ ! -f "$REPO_ROOT/opendraco/.env" ]; then
+    cp "$REPO_ROOT/opendraco/.env.example" "$REPO_ROOT/opendraco/.env"
+    echo "[install] created opendraco/.env from opendraco/.env.example -- fill in OLLAMA_BASE_URL"
+else
+    echo "[install] opendraco/.env already exists (leaving as-is)"
+fi
+if [ ! -f "$REPO_ROOT/api/.env" ]; then
+    cp "$REPO_ROOT/api/.env.example" "$REPO_ROOT/api/.env"
+    echo "[install] created api/.env from api/.env.example"
+else
+    echo "[install] api/.env already exists (leaving as-is)"
+fi
+
+echo
+echo "[install] done."
+echo "        Source your rc (\`source $RC_PATH\`) or open a new terminal, then:"
+echo
+echo "          opendraco --help                                  # uses the venv via the rc function"
+echo
+echo "        For interactive dev work (running pytest, importing opendraco modules, etc.)"
+echo "        activate the venv directly:"
+echo
+echo "          source $VENV_DIR/bin/activate                  # then \`python\`, \`pytest\`, \`pip\` target the venv"
+echo "          deactivate                                     # leaves the venv"

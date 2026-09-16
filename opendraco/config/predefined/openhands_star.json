@@ -1,0 +1,167 @@
+{
+  "id": "openhands_star",
+  "description": "OpenHands centralized star: AgentController hub dispatches to LocAgent, CodeActAgent (main coder), ReadOnlyAgent, BrowsingAgent; DummyAgent acts as the terminal sink. Every node is sourced from the OpenHands catalog.",
+  "entry": "controller",
+  "end": "finalizer",
+  "edges": [
+    {
+      "from": "controller",
+      "to": "locator"
+    },
+    {
+      "from": "locator",
+      "to": "controller"
+    },
+    {
+      "from": "controller",
+      "to": "coder"
+    },
+    {
+      "from": "coder",
+      "to": "controller"
+    },
+    {
+      "from": "controller",
+      "to": "reader"
+    },
+    {
+      "from": "reader",
+      "to": "controller"
+    },
+    {
+      "from": "controller",
+      "to": "browser"
+    },
+    {
+      "from": "browser",
+      "to": "controller"
+    },
+    {
+      "from": "controller",
+      "to": "finalizer"
+    }
+  ],
+  "agents": {
+    "controller": {
+      "class": "Router",
+      "variant": "OpenHands:AgentController",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 2048,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 1024,
+      "stop": [],
+      "max_iters": 1,
+      "prompts": {
+        "system": "You dispatch the next worker in an OpenHands-flavoured SWE-bench pipeline. Critical path: locator (LocAgent — finds source files) -> coder (CodeActAgent — edits/patches code) -> finalizer (emits the workspace diff). `reader` and `browser` are optional helpers and are never selected here. Answer with EXACTLY ONE word.",
+        "user": "Apply these rules IN ORDER. Stop at the first rule that matches.\n\n1. If `locator` output is EMPTY -> answer: locator\n2. If `coder` output is EMPTY -> answer: coder\n3. Otherwise -> answer: finalizer\n\n--- pipeline state (empty between `<<<` and `>>>` means that worker hasn't run yet) ---\nlocator output:  <<<{locator}>>>\ncoder output:    <<<{coder}>>>\nreader output:   <<<{reader}>>>\nbrowser output:  <<<{browser}>>>\n--- end state ---\n\nAnswer with one word from: locator, coder, finalizer."
+      }
+    },
+    "locator": {
+      "class": "Locator",
+      "variant": "OpenHands:LocAgent",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 8192,
+      "stream": true,
+      "temperature": 0.2,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [
+        "</files>"
+      ],
+      "max_iters": 6
+    },
+    "coder": {
+      "class": "Base agent",
+      "variant": "OpenHands:CodeActAgent",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 8192,
+      "stream": true,
+      "temperature": 0.3,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 1024,
+      "stop": [],
+      "max_iters": 6,
+      "prompts": {
+        "user": "## Task\n{issue}\n\n## Workspace\n{workspace}\n\nLocate the buggy code and FIX IT BY CALLING `StrReplaceEditorTool` with command='str_replace'. Do NOT just inspect the file with `ViewTool` — you MUST actually edit it. The pipeline reads `git diff` against the workspace as the final patch, so an unedited workspace produces NO PATCH and the run fails.\n\nWorkflow: (1) `ViewTool` once to see the buggy line(s), (2) `StrReplaceEditorTool` with command='str_replace' to apply the fix, (3) stop — the finalizer takes it from here."
+      },
+      "tools": [
+        {"name": "ViewTool"},
+        {"name": "StrReplaceEditorTool"}
+      ]
+    },
+    "reader": {
+      "class": "Helper/Proxy",
+      "variant": "OpenHands:ReadOnlyAgent",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 4096,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [],
+      "max_iters": 4
+    },
+    "browser": {
+      "class": "Helper/Proxy",
+      "variant": "OpenHands:BrowsingAgent",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 4096,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [],
+      "max_iters": 4
+    },
+    "finalizer": {
+      "class": "Helper/Proxy",
+      "variant": "OpenHands:DummyAgent",
+      "model": "ollama/qwen3.5:9b",
+      "think": true,
+      "num_ctx": 4096,
+      "stream": true,
+      "temperature": 0,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 64,
+      "seed": 0,
+      "num_predict": 512,
+      "stop": [],
+      "max_iters": 4
+    }
+  }
+}

@@ -1,0 +1,172 @@
+@if (open) {
+  <div class="hist-backdrop" (click)="close.emit()"></div>
+  <aside class="hist-panel" (click)="$event.stopPropagation()">
+    <header class="hist-head">
+      <h3>Version history</h3>
+      <div class="hist-config-name" [title]="'Config: ' + (configName || '')">
+        <code>{{ configName }}</code>
+      </div>
+      <!-- Clear-all is scoped to the WHOLE history repo, not this one
+           config — the confirm dialog spells that out. Disabled when
+           there's nothing to clear. Bin icon (🗑) mirrors the
+           topology toolbar's Delete button so the destructive action
+           reads consistently across the page. -->
+      <button type="button"
+              class="hist-clear-all"
+              [disabled]="entries.length === 0"
+              (click)="clearAllHistory()"
+              title="Clear this config's version history. Other configs' history is preserved.">
+        <ng-icon name="bin" /> Clear history
+      </button>
+      <button type="button" class="hist-close"
+              (click)="close.emit()" title="Close (Esc)">
+        <ng-icon name="close" />
+      </button>
+    </header>
+
+    <div class="hist-body">
+      <!-- ─── Timeline column ─────────────────────────────────── -->
+      <ul class="hist-timeline">
+        @if (loadingEntries) {
+          <li class="hist-empty">Loading history…</li>
+        } @else if (loadError) {
+          <li class="hist-empty hist-error">{{ loadError }}</li>
+        } @else if (entries.length === 0) {
+          <li class="hist-empty">
+            No history yet — save the config once to start versioning.
+          </li>
+        } @else {
+          @for (entry of entries; track entry.sha) {
+            <li class="hist-entry"
+                [class.selected]="selectedSha === entry.sha"
+                (click)="selectEntry(entry)">
+              <div class="hist-entry-row">
+                <span class="hist-ts">{{ formatTs(entry.ts) }}</span>
+                <code class="hist-sha" [title]="entry.sha">{{ shortSha(entry.sha) }}</code>
+                <!-- Per-entry delete. Only enabled when the commit has
+                     a parent (i.e. is not the root of the timeline) so
+                     the rebase has somewhere to graft onto. Same bin
+                     icon as the topology toolbar's Delete button. -->
+                <button type="button"
+                        class="hist-entry-del"
+                        [disabled]="!entry.parent_sha"
+                        (click)="deleteEntry(entry, $event)"
+                        [title]="entry.parent_sha
+                                  ? 'Delete this version (rewrites later SHAs)'
+                                  : 'Cannot delete the root commit — use Clear history instead'">
+                  <ng-icon name="bin" />
+                </button>
+              </div>
+              <div class="hist-msg" [title]="entry.message">{{ entry.message }}</div>
+              <button type="button"
+                      class="hist-runs-pill"
+                      [class.expanded]="expandedRunsSha === entry.sha"
+                      (click)="toggleRunsExpanded(entry, $event)"
+                      title="Runs that pinned to this version">
+                @if (runsLoadingSha === entry.sha) {
+                  …
+                } @else {
+                  {{ runsCountLabel(entry.sha) }}
+                }
+                <ng-icon class="hist-runs-chevron"
+                         [name]="expandedRunsSha === entry.sha ? 'chevronDown' : 'chevronRight'" />
+              </button>
+              @if (expandedRunsSha === entry.sha && runsBySha[entry.sha]?.length) {
+                <ul class="hist-runs-list">
+                  @for (run of runsBySha[entry.sha]; track run.runId) {
+                    <a class="hist-run-link"
+                       [routerLink]="resultsLink(run)"
+                       [queryParams]="resultsQuery(run)"
+                       (click)="$event.stopPropagation()">
+                      <code>{{ run.runId }}</code>
+                      @if (run.instanceIds?.length) {
+                        <span class="hist-run-iids" [title]="run.instanceIds.join(', ')">
+                          ({{ run.instanceIds.length }} instance{{ run.instanceIds.length === 1 ? '' : 's' }})
+                        </span>
+                      }
+                    </a>
+                  }
+                </ul>
+              }
+            </li>
+          }
+        }
+      </ul>
+
+      <!-- ─── Preview column ───────────────────────────────────── -->
+      <section class="hist-preview">
+        @if (!selectedSha) {
+          <div class="hist-preview-empty">
+            Select a version from the timeline to preview its contents.
+          </div>
+        } @else if (previewLoading) {
+          <div class="hist-preview-empty">Loading version {{ shortSha(selectedSha) }}…</div>
+        } @else if (previewError) {
+          <div class="hist-preview-empty hist-error">{{ previewError }}</div>
+        } @else {
+          <div class="hist-preview-head">
+            <div class="hist-preview-head-left">
+              <span>Preview · <code>{{ shortSha(selectedSha) }}</code></span>
+              <!-- View-mode toggle: graph (visual topology at this
+                   version) vs diff (line-by-line +/- against the
+                   current working config). The active button gets
+                   the accent border so it reads as a segmented
+                   control, not two independent buttons. -->
+              <div class="hist-view-toggle" role="tablist">
+                <button type="button"
+                        role="tab"
+                        [class.active]="viewMode === 'graph'"
+                        (click)="setViewMode('graph')"
+                        title="Render the historical config as a mini topology graph">
+                  <ng-icon name="graph" /> Graph
+                </button>
+                <button type="button"
+                        role="tab"
+                        [class.active]="viewMode === 'diff'"
+                        (click)="setViewMode('diff')"
+                        title="Line-by-line diff vs the current working config (+ added since · − removed since)">
+                  <ng-icon name="diffAdd" /> Diff
+                </button>
+              </div>
+            </div>
+            <button type="button"
+                    class="hist-restore-btn"
+                    (click)="doRestore()"
+                    title="Overwrite the current working file with this historical version">
+              <ng-icon name="refresh" /> Restore this version
+            </button>
+          </div>
+
+          <!-- Graph mode: cytoscape mount. Wrapped in @if so the
+               container only exists in the DOM while graph mode is
+               active — keeps the diff render from fighting cytoscape
+               for the same area. -->
+          @if (viewMode === 'graph') {
+            <div class="hist-preview-graph" #graphContainer></div>
+          }
+
+          <!-- Diff mode: rendered as a sequence of color-coded lines,
+               not a single <pre> string, so each line can carry its
+               own type-class for +/- coloring without per-character
+               span juggling. -->
+          @if (viewMode === 'diff') {
+            @if (currentContent == null) {
+              <div class="hist-preview-empty">
+                Diff unavailable — no current config loaded.
+              </div>
+            } @else if (!diffComputed) {
+              <div class="hist-preview-empty">Computing diff…</div>
+            } @else if (diffLines.length === 0) {
+              <div class="hist-preview-empty">
+                Identical — no differences from the current config.
+              </div>
+            } @else {
+              <pre class="hist-preview-diff">@for (l of diffLines; track $index) {<span [class]="'diff-line diff-' + l.type">{{ l.type === 'add' ? '+' : l.type === 'rm' ? '-' : ' ' }} {{ l.line }}
+</span>}</pre>
+            }
+          }
+        }
+      </section>
+    </div>
+  </aside>
+}

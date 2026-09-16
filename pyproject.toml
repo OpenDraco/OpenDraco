@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opendraco"
+version = "0.1.0"
+description = "Platform for designing, executing, evaluating, and comparing multi-agent topologies for software engineering tasks."
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+    "langchain",
+    "langgraph",
+    "langchain-ollama",
+    "langchain-google-genai",
+    "langchain-openai",
+    "pydantic",
+    "pyyaml",
+    "rich",
+    "datasets",
+    "wandb",
+    "weave",
+    "python-dotenv",
+    "flake8",
+    "unidiff",
+    "fastapi",
+    "uvicorn[standard]",
+    "typer",
+    "gitpython",
+    "ddgs",
+    "ipykernel<7",
+    "sb-cli",
+    "swebench; sys_platform != 'win32'",
+    # Transitive (langgraph, langsmith, datasets, wandb all require it), capped
+    # here because Windows Smart App Control blocks unsigned native extensions
+    # until they accrue cloud reputation: xxhash 4.0.1 is rejected on such
+    # machines while 4.0.0 and earlier are trusted. A known-good ceiling also
+    # keeps installs reproducible, at the cost of needing a bump to take a
+    # newer release. Inert on Linux and macOS.
+    "xxhash>=3.5.0,<=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+# `pip install -e .` registers an `opendraco` command in the venv's Scripts/
+# that resolves to `opendraco.cli:main`. The Typer app wraps every script /
+# server entry point listed in TODO.md's `## CLI` section.
+opendraco = "opendraco.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["opendraco*"]
+exclude = ["app*", "api*", "results*", "SWE-bench*"]
+
+# Pytest config lives in `pytest.ini` at the repo root — pytest reads
+# that one first and ignores this block if it's present here too. Keep
+# this comment as a breadcrumb so future me doesn't add competing
+# settings in two places.
