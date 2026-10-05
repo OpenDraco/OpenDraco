@@ -23,7 +23,18 @@ In existing systems that topology is usually hard-coded into the orchestration l
 
 **OpenDraco turns multi-agent topology into a configurable, executable, and versioned artifact.** You model agents as nodes and communication channels as edges, and configure each agent's role, prompt, tools, model, and decoding parameters. OpenDraco compiles that specification into a [LangGraph](https://www.langchain.com/langgraph) workflow, so agents can be added, replaced, or rewired between executions **without modifying the framework's core implementation**. It supports both local models through [Ollama](https://ollama.com/) and external LLM APIs (OpenAI, Gemini).
 
+See the [agent catalog](./docs/agent_catalog.md) for the currently included upstream systems and collected agent names.
+
 A FastAPI backend exposes inference + evaluation as SSE streams; an Angular frontend renders the topology graph, the live tool-call timeline, and a Results page that diffs new runs against archived predictions. The shipped topologies cover the usual structural families — locator → patcher → reviewer chains, hubs with conditional dispatch, hierarchical trees, parallel ensembles.
+
+## Authorship
+
+OpenDraco is developed at the [Universitat Politècnica de Catalunya (UPC)](https://www.upc.edu/) in Barcelona, Spain, as part of Xiang Feng Ye Pan's Bachelor's thesis, under the supervision of Vincenzo De Martino and Matias Martinez.
+
+- Xiang Feng Ye Pan — [xiangfeng.yepan@estudiantat.upc.edu](mailto:xiangfeng.yepan@estudiantat.upc.edu)
+- Vincenzo De Martino — [vincenzo.de.martino@upc.edu](mailto:vincenzo.de.martino@upc.edu)
+- Matias Martinez — [matias.martinez@upc.edu](mailto:matias.martinez@upc.edu)
+
 
 ## Prerequisites
 
