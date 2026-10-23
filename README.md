@@ -351,3 +351,16 @@ The shipped predefined topologies are OpenDraco-authored, but their prompts and 
 - [`opendraco/tools/repo/ACKNOWLEDGEMENTS.md`](./opendraco/tools/repo/ACKNOWLEDGEMENTS.md) — tool-implementation catalogue (12 repos, the per-`<repo>/` subdirs under `opendraco/tools/repo/`).
 
 The framework itself is built on [LangChain](https://www.langchain.com/) + [LangGraph](https://www.langchain.com/langgraph) for the agent graph runtime, [Ollama](https://ollama.com/) / [LiteLLM](https://github.com/BerriAI/litellm)-style model dispatch, [FastAPI](https://fastapi.tiangolo.com/) for the backend, and [Angular](https://angular.dev/) for the frontend topology canvas.
+
+## Citation
+
+If you use OpenDraco in your research, please cite:
+
+```bibtex
+@misc{opendraco2026,
+  title         = {OpenDraco: A Platform for Engineering and Experimenting with Configurable Multi-Agent Architectures for Software Engineering},
+  author        = {Ye Pan, Xiang Feng and De Martino, Vincenzo and Martinez, Matias},
+  journal.      =  {arXiv preprint arXiv: incoming},
+  year          = {2026},
+}
+```
