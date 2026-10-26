@@ -360,7 +360,7 @@ If you use OpenDraco in your research, please cite:
 @misc{opendraco2026,
   title         = {OpenDraco: A Platform for Engineering and Experimenting with Configurable Multi-Agent Architectures for Software Engineering},
   author        = {Ye Pan, Xiang Feng and De Martino, Vincenzo and Martinez, Matias},
-  journal.      =  {arXiv preprint arXiv: 2610.32686},
+  journal.      = {arXiv preprint arXiv: 2610.32686},
   year          = {2026},
 }
 ```
