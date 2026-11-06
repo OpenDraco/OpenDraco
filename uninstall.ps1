@@ -4,8 +4,10 @@ Set-Location -Path $PSScriptRoot
 # Reverse of install.ps1 (Windows). Removes the artefacts install.ps1 creates:
 # the ~\.opendraco-venv, the `opendraco` function in your $PROFILE, the 'opendraco'
 # Jupyter kernel, and app\node_modules. Your data is left alone by default --
-# pass --purge to ALSO delete the SWE-bench clone and the .env files (which
-# hold your API keys). Idempotent: safe to re-run, no-ops on anything gone.
+# pass --purge to ALSO delete the SWE-bench clone, the local Graphectory setup
+# (container, image, Graphectory\ clone) and the .env
+# files (which hold your API keys). Idempotent: safe to re-run, no-ops on
+# anything gone.
 
 $RepoRoot = $PSScriptRoot
 # Same path install.ps1 / start_api.ps1 / run_tests.py use.
@@ -15,6 +17,12 @@ $PythonOpendraco = Join-Path $VenvDir "Scripts\python.exe"
 # Markers install.ps1 wraps its profile function in (kept in sync).
 $Marker    = "# >>> opendraco-cli >>>"
 $EndMarker = "# <<< opendraco-cli <<<"
+
+# What install.ps1's optional Graphectory step creates (kept in sync). The
+# converted runs live in <RESULTS_DIR>\graphectory\ and stay with the results.
+$GraphectoryDir          = Join-Path $RepoRoot "Graphectory"
+$GraphectoryImage        = "graphectory"
+$GraphectoryContainer    = "graphectory-viewer"
 
 # Delete a directory tree, returning $true/$false instead of throwing so a
 # locked file (e.g. python.exe held by a live process) doesn't abort the whole
@@ -52,7 +60,9 @@ foreach ($arg in $args) {
         default {
             if ($arg -in @("-h", "--help", "-Help")) {
                 Write-Host "Usage: .\uninstall.ps1 [--purge] [-y|--yes]"
-                Write-Host "  --purge     also remove the SWE-bench\ clone and opendraco\.env + api\.env (secrets!)"
+                Write-Host "  --purge     also remove the SWE-bench\ clone, the local Graphectory setup"
+                Write-Host "              (container, image, Graphectory\ clone) and"
+                Write-Host "              opendraco\.env + api\.env (secrets!)"
                 Write-Host "  -y, --yes   skip the confirmation prompt (assume yes)"
                 exit 0
             }
@@ -79,8 +89,10 @@ Write-Host "  - app\node_modules"
 Write-Host "  - the venv at $VenvDir"
 if ($Purge) {
     Write-Host "  - --purge: the SWE-bench\ clone AND opendraco\.env + api\.env (your API keys!)" -ForegroundColor Yellow
+    Write-Host "  - --purge: the '$GraphectoryContainer' container, the '$GraphectoryImage' image and the" -ForegroundColor Yellow
+    Write-Host "    Graphectory\ clone (the converted runs in results\graphectory\ are kept)" -ForegroundColor Yellow
 } else {
-    Write-Host "  - KEEPING the SWE-bench\ clone and .env files (pass --purge to remove them too)"
+    Write-Host "  - KEEPING the SWE-bench\ clone, the Graphectory setup and .env files (pass --purge to remove them too)"
 }
 Write-Host ""
 if (-not (Read-YesNo "Proceed?")) {
@@ -143,6 +155,35 @@ if (Test-Path $VenvDir) {
     Write-Host "[uninstall] no venv at $VenvDir (already gone)" -ForegroundColor Cyan
 }
 
+# Local Graphectory (install.ps1's optional step), removed by --purge.
+function Remove-Graphectory {
+    # Function-local: under the script-wide "Stop", a redirected stderr line
+    # from docker would be a terminating error in Windows PowerShell 5.1.
+    # Exit codes decide. Container before image: an image a container still
+    # uses cannot be removed.
+    $ErrorActionPreference = "Continue"
+    if (Get-Command docker -ErrorAction SilentlyContinue) {
+        docker container inspect $GraphectoryContainer 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[uninstall] --purge: removing the '$GraphectoryContainer' container" -ForegroundColor Yellow
+            docker rm -f $GraphectoryContainer 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) { Write-Host "[uninstall] could not remove it -- run: docker rm -f $GraphectoryContainer" -ForegroundColor Yellow }
+        }
+        docker image inspect $GraphectoryImage 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[uninstall] --purge: removing the '$GraphectoryImage' Docker image" -ForegroundColor Yellow
+            docker rmi $GraphectoryImage 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) { Write-Host "[uninstall] could not remove it (still used?) -- run: docker rmi $GraphectoryImage" -ForegroundColor Yellow }
+        }
+    } elseif (Test-Path $GraphectoryDir) {
+        Write-Host "[uninstall] docker not found -- remove the '$GraphectoryContainer' container and '$GraphectoryImage' image by hand if they exist." -ForegroundColor Yellow
+    }
+    if (Test-Path $GraphectoryDir) {
+        Write-Host "[uninstall] --purge: removing the Graphectory clone at $GraphectoryDir" -ForegroundColor Yellow
+        [void](Remove-Tree $GraphectoryDir)
+    }
+}
+
 # --- 5. --purge extras (SWE-bench clone + .env secrets) ----------------------
 if ($Purge) {
     $SwebenchDir = Join-Path $RepoRoot "SWE-bench"
@@ -167,8 +208,9 @@ if ($Purge) {
             }
         }
     }
+    Remove-Graphectory
 } else {
-    Write-Host "[uninstall] kept SWE-bench\ and the .env files -- pass --purge to remove them too." -ForegroundColor Cyan
+    Write-Host "[uninstall] kept SWE-bench\, the Graphectory setup and the .env files -- pass --purge to remove them too." -ForegroundColor Cyan
 }
 
 Write-Host ""

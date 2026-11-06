@@ -98,6 +98,31 @@ if (-not $wslOk) {
     Write-Host "[install] continuing without WSL2 -- only needed for local SWE-bench eval on Windows ('opendraco run evaluation --local')."
 }
 
+# --- 1a. Optional: local Graphectory (asked) ---------------------------------
+# Graphectory draws a run as a trajectory graph (docs\graphectory_local.md).
+# Its Viewer is a Docker image built from a sibling Graphectory clone (like
+# SWE-bench) and run as the graphectory-viewer container, which reads the
+# runs OpenDraco converts into results\graphectory\ (the converter ships
+# with OpenDraco). The image is ~2.5 GB, so it is asked separately and only
+# offered when Docker is present; -y/--yes answers yes. Unlike the SWE-bench
+# harness it does not need WSL2.
+$GraphectoryDir       = Join-Path $RepoRoot "Graphectory"
+$GraphectoryImage     = "graphectory"
+$GraphectoryContainer = "graphectory-viewer"
+$GraphectoryPort      = 9610
+# <RESULTS_DIR>\graphectory with the default RESULTS_DIR; with another one,
+# `opendraco status` names the folder and the command to re-create it.
+$GraphectoryData      = Join-Path $RepoRoot "results\graphectory"
+$WantGraphectory = $false
+if ($dockerOk) {
+    Write-Host ""
+    Write-Host "[install] Graphectory shows each run as an interactive trajectory graph." -ForegroundColor Cyan
+    Write-Host "          Setting it up clones Graphectory, builds the ~2.5 GB '$GraphectoryImage'"
+    Write-Host "          Docker image and creates the '$GraphectoryContainer' container on"
+    Write-Host "          http://localhost:$GraphectoryPort (see docs\graphectory_local.md)."
+    $WantGraphectory = Read-YesNo "Set up Graphectory locally?"
+}
+
 # --- 1b. Confirm before making changes ---------------------------------------
 # Summarise exactly what this run will do, reflecting the prerequisite results
 # above (feature-gated steps show as SKIP when their tool is missing).
@@ -120,6 +145,14 @@ if ($dockerOk -and $wslOk) {
     Write-Host "  - clone SWE-bench and build its harness venv inside WSL"
 } else {
     Write-Host "  - SKIP the SWE-bench harness (needs Docker + WSL2)" -ForegroundColor Yellow
+}
+if ($WantGraphectory) {
+    Write-Host "  - clone Graphectory, build the '$GraphectoryImage' image and create the"
+    Write-Host "    '$GraphectoryContainer' container on :$GraphectoryPort (runs in results\graphectory\)"
+} elseif ($dockerOk) {
+    Write-Host "  - SKIP Graphectory (not selected)" -ForegroundColor Yellow
+} else {
+    Write-Host "  - SKIP Graphectory (needs Docker)" -ForegroundColor Yellow
 }
 Write-Host "  - create opendraco\.env and api\.env from examples if missing (never overwrites)"
 Write-Host ""
@@ -304,6 +337,66 @@ if (-not ($dockerOk -and $wslOk)) {
     }
 }
 
+# --- 6b. Set up Graphectory (only when selected in 1a) -----------------------
+# Best-effort and idempotent like the SWE-bench step: an existing clone, image
+# or container is left as-is, and any failure is a warning, never an abort.
+# OpenDraco itself (`opendraco api`) never touches the container. Updating is
+# manual (docs\graphectory_local.md, "Managing it").
+function Write-GraphectoryWarning($message) {
+    Write-Host "[install] warning: $message" -ForegroundColor Yellow
+    Write-Host "          Finish it by hand with docs\graphectory_local.md." -ForegroundColor Yellow
+}
+
+function Install-Graphectory {
+    # Function-local: docker and git report progress on stderr, and the
+    # script-wide "Stop" would turn a redirected stderr line into a
+    # terminating error under Windows PowerShell 5.1 (see the kernel step).
+    # Each step's exit code decides whether it worked.
+    $ErrorActionPreference = "Continue"
+
+    $url = "https://github.com/Intelligent-CAT-Lab/Graphectory.git"
+    if (Test-Path $GraphectoryDir) {
+        Write-Host "[install] Graphectory clone already present at $GraphectoryDir (leaving as-is)" -ForegroundColor Cyan
+    } else {
+        Write-Host "[install] cloning $url into $GraphectoryDir" -ForegroundColor Cyan
+        git clone $url $GraphectoryDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-GraphectoryWarning "cloning $url failed."
+            return
+        }
+    }
+
+    docker image inspect $GraphectoryImage 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[install] Docker image '$GraphectoryImage' already built (leaving as-is)" -ForegroundColor Cyan
+    } else {
+        Write-Host "[install] building the '$GraphectoryImage' Docker image (a few minutes)" -ForegroundColor Cyan
+        docker build -t $GraphectoryImage $GraphectoryDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-GraphectoryWarning "building the Graphectory image failed (is Docker Desktop running?)."
+            return
+        }
+    }
+
+    docker container inspect $GraphectoryContainer 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "[install] container '$GraphectoryContainer' already exists (leaving as-is; 'opendraco status' checks it)" -ForegroundColor Cyan
+    } else {
+        New-Item -ItemType Directory -Force $GraphectoryData | Out-Null
+        Write-Host "[install] creating the '$GraphectoryContainer' container on http://localhost:$GraphectoryPort" -ForegroundColor Cyan
+        docker run -d --name $GraphectoryContainer --restart unless-stopped `
+            -p "${GraphectoryPort}:9610" `
+            -v "${GraphectoryData}:/data" `
+            $GraphectoryImage `
+            python graph_construction/live_graph_server.py --port 9610 | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-GraphectoryWarning "creating the container failed (is port $GraphectoryPort free?)." }
+    }
+}
+
+if ($WantGraphectory) {
+    Install-Graphectory
+}
+
 # --- 7. .env scaffolding -----------------------------------------------------
 # Copy the example env files into place (non-destructive: never clobber an
 # existing .env). Fill in OLLAMA_BASE_URL etc. afterwards -- see README.
@@ -333,3 +426,9 @@ Write-Host "        activate the venv directly:"
 Write-Host ""
 Write-Host "          & `"$VenvDir\Scripts\Activate.ps1`"             # then `python`, `pytest`, `pip` target the venv"
 Write-Host "          deactivate                                     # leaves the venv"
+if ($WantGraphectory) {
+    Write-Host ""
+    Write-Host "        Graphectory: enable it in opendraco\.env and restart 'opendraco api':"
+    Write-Host ""
+    Write-Host "          GRAPHECTORY_URL=`"http://localhost:$GraphectoryPort`""
+}

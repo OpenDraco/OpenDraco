@@ -132,8 +132,9 @@ repair a broken venv, and how to undo it all live in
 
 ```bash
 # 1. Set up the venv, copy the .env files, clone + build the SWE-bench
-#    harness (when Docker — plus WSL2 on Windows — is present), and
-#    register the `opendraco` command on your $PATH
+#    harness (when Docker — plus WSL2 on Windows — is present), offer to set
+#    up Graphectory locally (when Docker is present; it asks), and register
+#    the `opendraco` command on your $PATH
 ./install.sh                 # or .\install.ps1 on Windows
 
 # 2. (optional) install.sh already copied opendraco/.env + api/.env from their
@@ -185,6 +186,7 @@ cp api/.env.example    api/.env
 | `SWEBENCH_API_KEY` | Required for `opendraco run evaluation --remote` (hosted SWE-bench leaderboard via `sb-cli`). Not needed for local Docker evaluation. |
 | `SWEBENCH_DIR` | Optional. Location of the local SWE-bench repo clone used by `--local` evaluation; its harness venv must live at `<SWEBENCH_DIR>/venv`. Relative paths resolve against the repo root. Default: `<repo>/SWE-bench`. |
 | `RESULTS_DIR` | Optional. Where predictions + evaluations are written. Relative paths resolve against the repo root. Default: `<repo>/results`. Also accepted in `api/.env`, where it takes precedence. |
+| `GRAPHECTORY_URL` | Optional. The local [Graphectory Viewer](#graphectory-tab-on-the-results-page), e.g. `http://localhost:9610`. Empty (the default) disables Graphectory. When set, every inference run that ends (finished, failed or cancelled) is converted into `<RESULTS_DIR>/graphectory/` and loaded into the Viewer in the background (best-effort: a failure only logs a warning), and the Results page's Graphectory tab shows the run's graph. The `graphectory-viewer` container itself is run with docker, never by OpenDraco; `opendraco status` checks the Viewer (`GET <url>/` for a 200) and the container. Restart the API after changing it. |
 
 > **Local evaluation needs the SWE-bench repo on disk.** The harness is discovered at `SWEBENCH_DIR` (default `<repo>/SWE-bench/`, venv at `<SWEBENCH_DIR>/venv/`). Clone it as described in [SWE-bench harness (local evaluation only)](#swe-bench-harness-local-evaluation-only). Inference-only flows and `--remote` evaluation don't need it.
 
@@ -207,6 +209,33 @@ The full set of built-in agent classes is `Router`, `Locator`, `Patcher`, `Revie
 
 A bare model name without a `/` (e.g. `"qwen3.5:9b"`) is treated as `ollama/...` for backward compatibility with the shipped predefined configs.
 
+### Graphectory tab on the Results page
+
+Graphectory turns a recorded agent run into an interactive trajectory graph: one node per distinct action, edges in the order the agents took them, each action labelled with a problem-solving phase, plus a run view of how the agents handed work to each other. The Results page gets a **Graphectory** tab next to *Prediction & evaluation*. Everything runs on your machine. The Viewer is a Docker container built from [Intelligent-CAT-Lab/Graphectory](https://github.com/Intelligent-CAT-Lab/Graphectory); the converter that turns a run into a graph ships with OpenDraco (`opendraco/utils/graphectory_converter/`, from [OpenDraco/graphectory-opendraco](https://github.com/OpenDraco/graphectory-opendraco)), so nothing else is installed. Set it up once from the repo root (or answer yes to the installer's Graphectory question, which runs the same docker commands):
+
+```bash
+# 1. Build the Viewer's image
+git clone https://github.com/Intelligent-CAT-Lab/Graphectory.git Graphectory
+docker build -t graphectory Graphectory
+
+# 2. Run it, reading the runs OpenDraco converts into results/graphectory/
+docker run -d --name graphectory-viewer --restart unless-stopped -p 9610:9610 \
+  -v "$PWD/results/graphectory:/data" \
+  graphectory python graph_construction/live_graph_server.py --port 9610
+#    PowerShell: same command with `-v "${PWD}\results\graphectory:/data"` and ` for line breaks
+
+# 3. Enable it in opendraco/.env, then (re)start the API
+GRAPHECTORY_URL="http://localhost:9610"
+```
+
+After that you only run `opendraco api` and `opendraco web`; the container keeps running on its own (`--restart unless-stopped`). OpenDraco never starts, creates or removes it. `opendraco status` checks it and prints the docker command for anything that is off, such as a stopped container, another port or another data folder.
+
+- **Analyze in Graphectory** converts the selected run's inference event log (`opendraco/logs/inference_logs/<stem>.ndjson`) into the Viewer and shows the run's graph. The log holds every instance of the run, so it is one graph per run, under the run's sanitised id. Finished runs are converted on their own when they end.
+- The tab shows the link with a **Copy** button, and embeds the page in an iframe (`sandbox="allow-scripts allow-same-origin allow-popups"`). That sandbox is safe only because the Viewer is on another origin than the app; when both share an origin the link is shown without embedding. **New tab** opens the link in a browser tab. The link is also saved as `<stem>.graphectory-link.json` next to the `.ndjson`, so the tab shows it again later.
+- Errors say what to fix: the Viewer not running, a container that reads another folder, or a run the converter cannot read.
+
+More detail, including updating and troubleshooting, is in [docs/graphectory_local.md](./docs/graphectory_local.md).
+
 ## Install on machine
 
 Windows (PowerShell):
@@ -222,7 +251,7 @@ chmod +x install.sh
 bash install.sh
 ```
 
-The install script checks for the prerequisites above — **only Python is mandatory** (it aborts without it); Ollama, Docker, Node.js, and WSL2 are feature-gated, so the installer warns and continues without them. It then creates a venv at `~/.opendraco-venv` (reusing it if already present, kept in the user's home so the repo stays free of build artefacts), runs `pip install -e ".[dev]"` (which reads `pyproject.toml` for dependencies + registers the `opendraco` console command), regenerates `requirements.txt` as a lockfile, registers an `opendraco` Jupyter kernel, installs the Angular frontend's npm dependencies (when npm is present), clones **and builds** the SWE-bench harness into `<repo>/SWE-bench` when its prerequisites are present — Docker on Linux/macOS, Docker + WSL2 on Windows (see [SWE-bench harness](#swe-bench-harness-local-evaluation-only)); otherwise it skips that step with a note. Finally it copies `opendraco/.env` + `api/.env` from their `.example` files (never clobbering existing ones), and appends an `opendraco` function to your shell rc (`$PROFILE` on Windows, `~/.zshrc` / `~/.bashrc` / `~/.config/fish/config.fish` on Linux/macOS) so the command is reachable from any directory.
+The install script checks for the prerequisites above — **only Python is mandatory** (it aborts without it); Ollama, Docker, Node.js, and WSL2 are feature-gated, so the installer warns and continues without them. It then creates a venv at `~/.opendraco-venv` (reusing it if already present, kept in the user's home so the repo stays free of build artefacts), runs `pip install -e ".[dev]"` (which reads `pyproject.toml` for dependencies + registers the `opendraco` console command), regenerates `requirements.txt` as a lockfile, registers an `opendraco` Jupyter kernel, installs the Angular frontend's npm dependencies (when npm is present), clones **and builds** the SWE-bench harness into `<repo>/SWE-bench` when its prerequisites are present — Docker on Linux/macOS, Docker + WSL2 on Windows (see [SWE-bench harness](#swe-bench-harness-local-evaluation-only)); otherwise it skips that step with a note. When Docker is present it also **asks** whether to set up [Graphectory](#graphectory-tab-on-the-results-page) locally (`-y` answers yes): on yes it clones `Graphectory` into `<repo>/`, builds the `graphectory` Docker image and creates the `graphectory-viewer` container on <http://localhost:9610> reading `results/graphectory/` — idempotently, leaving an existing container as it is, with any failure only a warning. Set `GRAPHECTORY_URL` afterwards (see [Graphectory tab on the Results page](#graphectory-tab-on-the-results-page)). Finally it copies `opendraco/.env` + `api/.env` from their `.example` files (never clobbering existing ones), and appends an `opendraco` function to your shell rc (`$PROFILE` on Windows, `~/.zshrc` / `~/.bashrc` / `~/.config/fish/config.fish` on Linux/macOS) so the command is reachable from any directory.
 
 Open a new shell (or `source` the rc file) so the profile change takes effect, then verify — `opendraco status` prints a colour-coded readiness check of the whole toolchain:
 
@@ -249,7 +278,7 @@ To reverse the install — remove the `~/.opendraco-venv`, strip the `opendraco`
 bash uninstall.sh            # or .\uninstall.ps1 on Windows
 ```
 
-Your data is left untouched by default. Add `--purge` to *also* delete the `SWE-bench/` clone and the `opendraco/.env` + `api/.env` files (which hold your API keys):
+Your data is left untouched by default. Add `--purge` to *also* delete the `SWE-bench/` clone, the local Graphectory setup (the `graphectory-viewer` container, the `graphectory` image and the `Graphectory/` clone; the converted runs in `results/graphectory/` stay with your results) and the `opendraco/.env` + `api/.env` files (which hold your API keys):
 
 ```bash
 bash uninstall.sh --purge    # or .\uninstall.ps1 --purge on Windows

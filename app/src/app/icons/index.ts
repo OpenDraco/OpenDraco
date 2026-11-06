@@ -9,9 +9,11 @@ import {
   heroArrowPath,             // refresh / restore
   heroArrowsRightLeft,       // re-layout
   heroArrowUpRight,          // add-edge
+  heroArrowTopRightOnSquare, // open in a new browser tab
   heroArrowUturnLeft,        // undo
   heroArrowUturnRight,       // redo
   heroArrowDownTray,         // download
+  heroClipboardDocument,     // copy
   heroFolder,                // open path / reveal-in-explorer
   heroFolderOpen,            // open-state folder
   heroEye,                   // view / inspect
@@ -42,9 +44,11 @@ export const ICON = {
   refresh: heroArrowPath,
   shuffle: heroArrowsRightLeft,
   arrowUpRight: heroArrowUpRight,
+  externalLink: heroArrowTopRightOnSquare,
   undo: heroArrowUturnLeft,
   redo: heroArrowUturnRight,
   download: heroArrowDownTray,
+  copy: heroClipboardDocument,
   folder: heroFolder,
   folderOpen: heroFolderOpen,
   eye: heroEye,

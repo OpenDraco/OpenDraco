@@ -2,9 +2,10 @@
 # Reverse of install.sh (Linux / macOS / WSL). Removes the artefacts install.sh
 # creates: the ~/.opendraco-venv, the `opendraco` function in your shell rc, the
 # 'opendraco' Jupyter kernel, and app/node_modules. Your data is left alone by
-# default -- pass --purge to ALSO delete the SWE-bench clone and the .env files
-# (which hold your API keys). Idempotent: safe to re-run, no-ops on anything
-# already gone.
+# default -- pass --purge to ALSO delete the SWE-bench clone, the local
+# Graphectory setup (container, image, Graphectory/ clone) and the .env files
+# (which hold your API keys). Idempotent: safe to
+# re-run, no-ops on anything already gone.
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,6 +17,12 @@ PYTHON_OPENDRACO="$VENV_DIR/bin/python"
 MARKER="# >>> opendraco-cli >>>"
 END_MARKER="# <<< opendraco-cli <<<"
 
+# What install.sh's optional Graphectory step creates (kept in sync). The
+# converted runs live in <RESULTS_DIR>/graphectory/ and stay with the results.
+GRAPHECTORY_DIR="$REPO_ROOT/Graphectory"
+GRAPHECTORY_IMAGE="graphectory"
+GRAPHECTORY_CONTAINER="graphectory-viewer"
+
 PURGE=0
 AUTO_YES=0
 for arg in "$@"; do
@@ -24,7 +31,9 @@ for arg in "$@"; do
         -y|--yes) AUTO_YES=1 ;;
         -h|--help)
             echo "Usage: bash uninstall.sh [--purge] [-y|--yes]"
-            echo "  --purge     also remove the SWE-bench/ clone and opendraco/.env + api/.env (secrets!)"
+            echo "  --purge     also remove the SWE-bench/ clone, the local Graphectory setup"
+            echo "              (container, image, Graphectory/ clone) and"
+            echo "              opendraco/.env + api/.env (secrets!)"
             echo "  -y, --yes   skip the confirmation prompt (assume yes)"
             exit 0 ;;
         *) echo "[uninstall] unknown arg: $arg (try --help)" >&2; exit 2 ;;
@@ -53,8 +62,10 @@ echo "  - app/node_modules"
 echo "  - the venv at $VENV_DIR"
 if [ "$PURGE" = 1 ]; then
     echo "  - --purge: the SWE-bench/ clone AND opendraco/.env + api/.env (your API keys!)"
+    echo "  - --purge: the '$GRAPHECTORY_CONTAINER' container, the '$GRAPHECTORY_IMAGE' image and the"
+    echo "    Graphectory/ clone (the converted runs in results/graphectory/ are kept)"
 else
-    echo "  - KEEPING the SWE-bench/ clone and .env files (pass --purge to remove them too)"
+    echo "  - KEEPING the SWE-bench/ clone, the Graphectory setup and .env files (pass --purge to remove them too)"
 fi
 echo
 if ! confirm "[uninstall] Proceed?"; then
@@ -137,8 +148,29 @@ if [ "$PURGE" = 1 ]; then
             rm -f "$env_file"
         fi
     done
+
+    # Local Graphectory (install.sh's optional step). Container before image:
+    # an image a container still uses cannot be removed.
+    if command -v docker >/dev/null 2>&1; then
+        if docker container inspect "$GRAPHECTORY_CONTAINER" >/dev/null 2>&1; then
+            echo "[uninstall] --purge: removing the '$GRAPHECTORY_CONTAINER' container"
+            docker rm -f "$GRAPHECTORY_CONTAINER" >/dev/null || \
+                echo "[uninstall] could not remove it -- run: docker rm -f $GRAPHECTORY_CONTAINER"
+        fi
+        if docker image inspect "$GRAPHECTORY_IMAGE" >/dev/null 2>&1; then
+            echo "[uninstall] --purge: removing the '$GRAPHECTORY_IMAGE' Docker image"
+            docker rmi "$GRAPHECTORY_IMAGE" >/dev/null || \
+                echo "[uninstall] could not remove it (still used?) -- run: docker rmi $GRAPHECTORY_IMAGE"
+        fi
+    elif [ -d "$GRAPHECTORY_DIR" ]; then
+        echo "[uninstall] docker not found -- remove the '$GRAPHECTORY_CONTAINER' container and '$GRAPHECTORY_IMAGE' image by hand if they exist."
+    fi
+    if [ -d "$GRAPHECTORY_DIR" ]; then
+        echo "[uninstall] --purge: removing the Graphectory clone at $GRAPHECTORY_DIR"
+        rm -rf "$GRAPHECTORY_DIR"
+    fi
 else
-    echo "[uninstall] kept SWE-bench/ and the .env files -- pass --purge to remove them too."
+    echo "[uninstall] kept SWE-bench/, the Graphectory setup and the .env files -- pass --purge to remove them too."
 fi
 
 echo

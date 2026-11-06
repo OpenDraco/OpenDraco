@@ -30,6 +30,7 @@ from api.common import (
     logger,
 )
 from opendraco.config.loader import resolve_config_path
+from opendraco.utils.graphectory import graphectory_base_url, publish_run_log, safe_run_id
 from opendraco.utils.json_safe import safe_serialize
 from opendraco.utils.notebook import build_notebook_for_inputs
 
@@ -53,6 +54,42 @@ _cancel_flags: dict[str, bool] = {}
 # Set on worker start, cleared on done/error/cancel. The Inference page
 # polls `/api/inference/active` to rebuild its UI from the .log transcript.
 _active_run: dict[str, Any] | None = None
+
+
+def _publish_log_file(viewer_url: str, config_name: str, run_id: str, log_path: str) -> None:
+    """Convert one finished run's whole inference log into the local
+    Graphectory Viewer and save its link beside the log
+    (`<stem>.graphectory-link.json`, what the Results tab shows). Runs on
+    its own thread; never raises."""
+    try:
+        log_file = Path(log_path)
+        log_text = log_file.read_text(encoding="utf-8", errors="replace")
+        graph = publish_run_log(viewer_url, run_id, f"{config_name} {run_id}", log_text)
+        if graph:
+            log_file.with_suffix(".graphectory-link.json").write_text(
+                json.dumps({"graph": graph, "run_id": safe_run_id(run_id)}, indent=2),
+                encoding="utf-8",
+            )
+    except Exception as exc:  # the publish is best-effort
+        logger.warning("Graphectory publish of run %s skipped: %s", run_id, exc)
+
+
+def _start_graphectory_publish(config_name: str, run_id: str, log_path: str) -> None:
+    """Hand a finished run's log to Graphectory in the background.
+
+    Call it once the log file is closed. A no-op unless `GRAPHECTORY_URL`
+    is set; the conversion runs on a daemon thread so a slow or stopped
+    Viewer never delays the run's final events (a failure only logs a
+    warning)."""
+    viewer_url = graphectory_base_url()
+    if not viewer_url:
+        return
+    threading.Thread(
+        target=_publish_log_file,
+        args=(viewer_url, config_name, run_id, log_path),
+        daemon=True,
+        name="graphectory-publish",
+    ).start()
 
 
 @router.post("/api/inference/run")
@@ -92,6 +129,8 @@ async def run_inference(req: InferenceRequest):
     # text_log_state["handler"] is the FileHandler for the user-facing .log.
     log_state: dict[str, Any] = {"fh": None}
     text_log_state: dict[str, Any] = {"handler": None}
+    # Filled once the NDJSON log exists; the `finally` below uploads it.
+    graphectory_state: dict[str, str] = {}
 
     def put(data: dict) -> None:
         loop.call_soon_threadsafe(q.put_nowait, data)
@@ -148,6 +187,9 @@ async def run_inference(req: InferenceRequest):
             # Snapshot the resolved config so Results can hand it back later.
             Path(config_snapshot_path).write_text(json.dumps(cfg, indent=2), encoding="utf-8")
             log_state["fh"] = open(internal_log_path, "w", encoding="utf-8", buffering=1)
+            graphectory_state.update(
+                config_name=config_name, run_id=run_id, log_path=internal_log_path,
+            )
 
             # `run_meta` is the NDJSON header — config name + git SHA so the
             # History panel can resolve "runs that used this version".
@@ -466,6 +508,13 @@ async def run_inference(req: InferenceRequest):
                     handler.close()
                 except (OSError, ValueError):
                     pass
+            # Last, with the log closed: one best-effort publish per run,
+            # whether it finished, failed or was cancelled.
+            if graphectory_state:
+                try:
+                    _start_graphectory_publish(**graphectory_state)
+                except Exception as exc:
+                    logger.warning("Graphectory publish not started: %s", exc)
             _active_run = None
             loop.call_soon_threadsafe(q.put_nowait, None)
 

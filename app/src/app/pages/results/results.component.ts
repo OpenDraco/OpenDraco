@@ -5,7 +5,7 @@ import { Component, ChangeDetectorRef, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { forkJoin, Subscription } from 'rxjs';
 
 import { ApiService } from '../../services/api.service';
 import { ResultsStateService } from '../../services/results-state.service';
@@ -28,6 +28,7 @@ import {
 import {
   InstanceTreePickerComponent, PredictionPanelComponent,
   EvaluationPanelComponent, LogViewerModalComponent, JobGroup,
+  GraphectoryPanelComponent, GraphectoryViewState,
 } from './components/index';
 
 type LogName = 'run_instance.log' | 'test_output.txt' | 'eval.sh' | 'patch.diff' | 'report.json';
@@ -38,7 +39,7 @@ type LogName = 'run_instance.log' | 'test_output.txt' | 'eval.sh' | 'patch.diff'
   imports: [
     CommonModule, FormsModule, DracoBoxComponent, DracoButtonComponent, DracoSelectComponent,
     InstanceTreePickerComponent, PredictionPanelComponent,
-    EvaluationPanelComponent, LogViewerModalComponent, NgIcon,
+    EvaluationPanelComponent, LogViewerModalComponent, GraphectoryPanelComponent, NgIcon,
   ],
   providers: [provideIcons(ICON)],
   templateUrl: './results.component.html',
@@ -81,6 +82,22 @@ export class ResultsComponent implements OnInit {
    * the first fetch lands. */
   predictionsLogsDir = 'results/predictions/logs';
   private agentTypesCache: AgentType[] | null = null;
+
+  // ─── Graphectory tab ──────────────────────────────────────────
+  /** Which view sits under the run picker. Both stay mounted so the
+   * embedded Viewer is not reloaded on every tab switch. */
+  resultsView: 'overview' | 'graphectory' = 'overview';
+  /** `null` until `/api/results/graphectory` has answered. */
+  graphectoryConfigured: boolean | null = null;
+  /** `GRAPHECTORY_URL`, the Viewer. */
+  graphectoryUrl = '';
+  /** Names of the Graphectory settings that are empty. */
+  graphectoryMissing: string[] = [];
+  graphectoryState: GraphectoryViewState = 'idle';
+  /** The selected run's Viewer link, from an upload or a saved one. */
+  graphectoryLink = '';
+  graphectoryError = '';
+  private graphectorySub: Subscription | null = null;
 
   loading = false;
   error = '';
@@ -348,6 +365,7 @@ export class ResultsComponent implements OnInit {
     this.showPredictionLog = false;
     this.logContent = '';
     this.showLogs = false;
+    this.resetGraphectory();
   }
 
   clearSelection(): void {
@@ -365,6 +383,7 @@ export class ResultsComponent implements OnInit {
     this.predictionConfigJson = '';
     this.predictionConfigPath = '';
     this.logContent = '';
+    this.resetGraphectory();
     if (this.selectedPredFile) {
       this.loadPrediction(this.selectedPredFile);
       this.loadPredictionLog(this.selectedPredFile);
@@ -372,6 +391,7 @@ export class ResultsComponent implements OnInit {
     }
     if (this.selectedEvalDir) this.loadEvaluation(this.selectedEvalDir);
     if (runId) this._revealRunInLeftPanel(runId);
+    this.loadSavedGraphectoryLink();
     this.cdr.markForCheck();
   }
 
@@ -627,6 +647,103 @@ export class ResultsComponent implements OnInit {
     this.logViewTitle = '';
     this.logViewFileName = '';
     this.cdr.markForCheck();
+  }
+
+  // ─── Graphectory tab ──────────────────────────────────────────
+  showResultsView(view: 'overview' | 'graphectory'): void {
+    this.resultsView = view;
+    if (view === 'graphectory') {
+      // Asked again on each visit until configured: the answer only
+      // changes when the API restarts with new settings.
+      if (this.graphectoryConfigured !== true) this.loadGraphectoryStatus();
+      else this.loadSavedGraphectoryLink();
+    }
+    this.cdr.markForCheck();
+  }
+
+  private loadGraphectoryStatus(): void {
+    this.api.getGraphectoryStatus().subscribe({
+      next: status => {
+        this.graphectoryConfigured = status.configured;
+        this.graphectoryUrl = status.url;
+        this.graphectoryMissing = status.missing;
+        this.graphectoryError = '';
+        this.loadSavedGraphectoryLink();
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.graphectoryConfigured = null;
+        this.graphectoryError = `Could not ask the API whether Graphectory is configured: ${this.errorText(err)}`;
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  /** Show the link a past upload of the selected run saved, if any. */
+  private loadSavedGraphectoryLink(): void {
+    const file = this.selectedPredFile;
+    if (this.resultsView !== 'graphectory' || this.graphectoryConfigured !== true || !file
+        || this.graphectoryState !== 'idle') return;
+    this.graphectorySub = this.api.getSavedGraphectoryLink(file.path).subscribe({
+      next: res => {
+        if (this.selectedPredFile?.path !== file.path || this.graphectoryState !== 'idle') return;
+        if (res.graph) {
+          this.graphectoryLink = res.graph;
+          this.graphectoryState = 'ready';
+        }
+        this.cdr.markForCheck();
+      },
+      // A link that cannot be read is no worse than none: Analyze still works.
+      error: () => {},
+    });
+  }
+
+  /** Drop the previous run's link and cancel a request still in flight. */
+  private resetGraphectory(): void {
+    this.graphectorySub?.unsubscribe();
+    this.graphectorySub = null;
+    this.graphectoryState = 'idle';
+    this.graphectoryLink = '';
+    // A failed status check stays visible; it is not tied to a run.
+    if (this.graphectoryConfigured !== null) this.graphectoryError = '';
+  }
+
+  analyzeInGraphectory(): void {
+    const file = this.selectedPredFile;
+    if (!file || this.graphectoryConfigured !== true) return;
+    this.resetGraphectory();
+    this.graphectoryState = 'uploading';
+    this.cdr.markForCheck();
+    // Synchronous on the API's side: it answers once the Viewer lists the run.
+    this.graphectorySub = this.api.uploadToGraphectory(file.path).subscribe({
+      next: res => {
+        this.graphectoryLink = res.graph;
+        this.graphectoryState = 'ready';
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.graphectoryError = this.errorText(err);
+        // 504 is the API's answer for "the Graphectory Viewer is
+        // unreachable"; every other error carries its own message.
+        this.graphectoryState = err?.status === 504 ? 'unreachable' : 'error';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  /** `href` is the panel's validated http(s) link. */
+  openGraphectoryInNewTab(href: string): void {
+    if (href) window.open(href, '_blank', 'noopener');
+  }
+
+  /** FastAPI puts the message in `detail`; status 0 means the API itself
+   * did not answer. */
+  private errorText(err: { status?: number; error?: { detail?: unknown }; message?: string } | null): string {
+    if (err?.status === 0) return 'the OpenDraco API did not answer';
+    const detail = err?.error?.detail;
+    if (typeof detail === 'string' && detail) return detail;
+    if (detail) return JSON.stringify(detail);
+    return err?.message ?? String(err);
   }
 
   // ─── View helpers ─────────────────────────────────────────────

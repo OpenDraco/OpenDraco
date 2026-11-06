@@ -49,7 +49,18 @@
         </div>
       </draco-box>
 
-      <div class="inner-grid">
+      <div class="view-tabs" role="tablist">
+        <button class="tab" role="tab"
+                [class.active]="resultsView === 'overview'"
+                [attr.aria-selected]="resultsView === 'overview'"
+                (click)="showResultsView('overview')">Prediction &amp; evaluation</button>
+        <button class="tab" role="tab"
+                [class.active]="resultsView === 'graphectory'"
+                [attr.aria-selected]="resultsView === 'graphectory'"
+                (click)="showResultsView('graphectory')"><ng-icon name="graph" /> Graphectory</button>
+      </div>
+
+      <div class="inner-grid" [class.view-hidden]="resultsView !== 'overview'">
         <app-prediction-panel
             [prediction]="prediction"
             [selectedPredFile]="selectedPredFile"
@@ -88,6 +99,18 @@
             (setActiveLog)="setActiveLog($event)"
             (downloadLog)="downloadLog()" />
       </div>
+
+      <app-graphectory-panel
+          [class.view-hidden]="resultsView !== 'graphectory'"
+          [configured]="graphectoryConfigured"
+          [missing]="graphectoryMissing"
+          [serverUrl]="graphectoryUrl"
+          [selectedPredFile]="selectedPredFile"
+          [state]="graphectoryState"
+          [link]="graphectoryLink"
+          [error]="graphectoryError"
+          (analyze)="analyzeInGraphectory()"
+          (openInNewTab)="openGraphectoryInNewTab($event)" />
     }
 
     @if (error) {

@@ -6,6 +6,7 @@ import {
   ResultInstance, ResultPrediction, ResultEvaluation, ToolDescriptor,
   AgentType, AgentVariant, PredictionInspection, OllamaModel,
   ConfigHistoryEntry, ConfigRunMatch, OpendracoPaths,
+  GraphectoryStatus, GraphectoryUpload, GraphectoryLink,
 } from '../models/types';
 
 const BASE = 'http://localhost:8000/api';
@@ -185,6 +186,26 @@ export class ApiService {
   getResultPredictionNdjson(path: string): Observable<{ path: string; name: string; exists: boolean; raw: string }> {
     return this.http.get<{ path: string; name: string; exists: boolean; raw: string }>(
       `${BASE}/results/prediction/ndjson?path=${encodeURIComponent(path)}`,
+    );
+  }
+
+  /** Which Graphectory settings the backend has. */
+  getGraphectoryStatus(): Observable<GraphectoryStatus> {
+    return this.http.get<GraphectoryStatus>(`${BASE}/results/graphectory`);
+  }
+
+  /** Have the backend convert the run's inference log into the local
+   * Graphectory Viewer and get the run's Viewer link back. */
+  uploadToGraphectory(path: string): Observable<GraphectoryUpload> {
+    return this.http.post<GraphectoryUpload>(
+      `${BASE}/results/prediction/graphectory`, { path },
+    );
+  }
+
+  /** The Viewer link a past upload of this run saved, if any. */
+  getSavedGraphectoryLink(path: string): Observable<GraphectoryLink> {
+    return this.http.get<GraphectoryLink>(
+      `${BASE}/results/prediction/graphectory?path=${encodeURIComponent(path)}`,
     );
   }
 

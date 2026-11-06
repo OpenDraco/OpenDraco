@@ -75,6 +75,30 @@ npm_ok=0;    test_cli npm    "Install Node.js 18+ from https://nodejs.org/ (need
 [ "$docker_ok" = 0 ] && echo "[install] continuing without docker -- only needed for local SWE-bench eval; 'opendraco run evaluation' (default --local) will fail; pass --remote to use sb-cli instead."
 [ "$npm_ok" = 0 ]    && echo "[install] continuing without npm -- only needed for the Angular frontend; 'opendraco web' will fail until you install Node.js."
 
+# ── 1a. Optional: local Graphectory (asked) ──────────────────────────────────
+# Graphectory draws a run as a trajectory graph (docs/graphectory_local.md).
+# Its Viewer is a Docker image built from a sibling Graphectory clone (like
+# SWE-bench) and run as the graphectory-viewer container, which reads the
+# runs OpenDraco converts into results/graphectory/ (the converter ships
+# with OpenDraco). The image is ~2.5 GB, so it is asked separately and only
+# offered when Docker is present; -y/--yes answers yes.
+GRAPHECTORY_DIR="$REPO_ROOT/Graphectory"
+GRAPHECTORY_IMAGE="graphectory"
+GRAPHECTORY_CONTAINER="graphectory-viewer"
+GRAPHECTORY_PORT=9610
+# <RESULTS_DIR>/graphectory with the default RESULTS_DIR; with another one,
+# `opendraco status` names the folder and the command to re-create it.
+GRAPHECTORY_DATA="$REPO_ROOT/results/graphectory"
+want_graphectory=0
+if [ "$docker_ok" = 1 ]; then
+    echo
+    echo "[install] Graphectory shows each run as an interactive trajectory graph."
+    echo "          Setting it up clones Graphectory, builds the ~2.5 GB '$GRAPHECTORY_IMAGE'"
+    echo "          Docker image and creates the '$GRAPHECTORY_CONTAINER' container on"
+    echo "          http://localhost:$GRAPHECTORY_PORT (see docs/graphectory_local.md)."
+    confirm "[install] Set up Graphectory locally?" && want_graphectory=1
+fi
+
 # ── 1b. Confirm before making changes ─────────────────────────────────────────
 # Summarise exactly what this run will do, reflecting the prerequisite results
 # above (feature-gated steps show as SKIP when their tool is missing).
@@ -97,6 +121,14 @@ if [ "$docker_ok" = 1 ]; then
     echo "  - clone SWE-bench and build its harness venv"
 else
     echo "  - SKIP the SWE-bench harness (needs Docker)"
+fi
+if [ "$want_graphectory" = 1 ]; then
+    echo "  - clone Graphectory, build the '$GRAPHECTORY_IMAGE' image and create the"
+    echo "    '$GRAPHECTORY_CONTAINER' container on :$GRAPHECTORY_PORT (runs in results/graphectory/)"
+elif [ "$docker_ok" = 1 ]; then
+    echo "  - SKIP Graphectory (not selected)"
+else
+    echo "  - SKIP Graphectory (needs Docker)"
 fi
 echo "  - create opendraco/.env and api/.env from examples if missing (never overwrites)"
 echo
@@ -272,6 +304,56 @@ else
     fi
 fi
 
+# ── 6b. Set up Graphectory (only when selected in 1a) ────────────────────────
+# Best-effort and idempotent like the SWE-bench step: an existing clone, image
+# or container is left as-is, and any failure is a warning, never an abort.
+# OpenDraco itself (`opendraco api`) never touches the container. Updating is
+# manual (docs/graphectory_local.md, "Managing it").
+graphectory_warn() {
+    echo "[install] warning: $1"
+    echo "          Finish it by hand with docs/graphectory_local.md."
+}
+
+setup_graphectory() {
+    local url="https://github.com/Intelligent-CAT-Lab/Graphectory.git"
+    if [ -d "$GRAPHECTORY_DIR" ]; then
+        echo "[install] Graphectory clone already present at $GRAPHECTORY_DIR (leaving as-is)"
+    else
+        echo "[install] cloning $url into $GRAPHECTORY_DIR"
+        if ! git clone "$url" "$GRAPHECTORY_DIR"; then
+            graphectory_warn "cloning $url failed."
+            return 0
+        fi
+    fi
+
+    if docker image inspect "$GRAPHECTORY_IMAGE" >/dev/null 2>&1; then
+        echo "[install] Docker image '$GRAPHECTORY_IMAGE' already built (leaving as-is)"
+    else
+        echo "[install] building the '$GRAPHECTORY_IMAGE' Docker image (a few minutes)"
+        if ! docker build -t "$GRAPHECTORY_IMAGE" "$GRAPHECTORY_DIR"; then
+            graphectory_warn "building the Graphectory image failed (is Docker running?)."
+            return 0
+        fi
+    fi
+
+    if docker container inspect "$GRAPHECTORY_CONTAINER" >/dev/null 2>&1; then
+        echo "[install] container '$GRAPHECTORY_CONTAINER' already exists (leaving as-is; \`opendraco status\` checks it)"
+    else
+        mkdir -p "$GRAPHECTORY_DATA"
+        echo "[install] creating the '$GRAPHECTORY_CONTAINER' container on http://localhost:$GRAPHECTORY_PORT"
+        docker run -d --name "$GRAPHECTORY_CONTAINER" --restart unless-stopped \
+            -p "$GRAPHECTORY_PORT:9610" \
+            -v "$GRAPHECTORY_DATA:/data" \
+            "$GRAPHECTORY_IMAGE" \
+            python graph_construction/live_graph_server.py --port 9610 >/dev/null || \
+            graphectory_warn "creating the container failed (is port $GRAPHECTORY_PORT free?)."
+    fi
+}
+
+if [ "$want_graphectory" = 1 ]; then
+    setup_graphectory
+fi
+
 # ── 7. .env scaffolding ──────────────────────────────────────────────────────
 # Copy the example env files into place (non-destructive: never clobber an
 # existing .env). Fill in OLLAMA_BASE_URL etc. afterwards -- see README.
@@ -299,3 +381,9 @@ echo "        activate the venv directly:"
 echo
 echo "          source $VENV_DIR/bin/activate                  # then \`python\`, \`pytest\`, \`pip\` target the venv"
 echo "          deactivate                                     # leaves the venv"
+if [ "$want_graphectory" = 1 ]; then
+    echo
+    echo "        Graphectory: enable it in opendraco/.env and restart \`opendraco api\`:"
+    echo
+    echo "          GRAPHECTORY_URL=\"http://localhost:$GRAPHECTORY_PORT\""
+fi

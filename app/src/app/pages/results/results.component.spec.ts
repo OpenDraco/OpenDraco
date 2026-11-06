@@ -1,7 +1,7 @@
 import '@angular/compiler';
 import { describe, expect, it, vi } from 'vitest';
 import { ChangeDetectorRef } from '@angular/core';
-import { of } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
 import { convertToParamMap } from '@angular/router';
 
 import { ResultsComponent } from './results.component';
@@ -20,8 +20,10 @@ import type { ResultInstance, ResultRun } from '../../models/types';
 function makeResults(
   queryParams: Record<string, string> | undefined,
   instances: ResultInstance[],
+  apiExtras: Record<string, unknown> = {},
 ): { app: ResultsComponent; state: ResultsStateService; revealSpy: ReturnType<typeof vi.fn> } {
   const api = {
+    ...apiExtras,
     getResultInstances: vi.fn(() => of(instances)),
     getResultPrediction: vi.fn(() => of(null)),
     getResultPredictionLog: vi.fn(() => of({ exists: false, raw: '' })),
@@ -249,6 +251,133 @@ describe('ResultsComponent deep-link reveal', () => {
       vi.runAllTimers();
     } finally {
       vi.useRealTimers();
+    }
+  });
+});
+
+describe('ResultsComponent Graphectory tab', () => {
+  const PRED_PATH = '/repo/results/predictions/prediction-chain-4f7d9f56.jsonl';
+  const LINK = 'https://viewer.example:9610/graph/opendraco/chain-4f7d9f56';
+  const CONFIGURED = { configured: true, url: 'https://viewer.example:9610', missing: [] };
+  const NO_LINK = { getSavedGraphectoryLink: vi.fn(() => of({ graph: null })) };
+
+  function instancesWithPrediction(): ResultInstance[] {
+    const inst = mkInstance('django__django-10973', [{ run_id: 'chain-4f7d9f56' }]);
+    inst.runs[0].prediction = { path: PRED_PATH, name: 'prediction-chain-4f7d9f56.jsonl', mtime: 0 };
+    return [inst];
+  }
+
+  function open(apiExtras: Record<string, unknown>): ResultsComponent {
+    vi.useFakeTimers();
+    try {
+      const { app } = makeResults(
+        { runId: 'chain-4f7d9f56', instanceId: 'django__django-10973' },
+        instancesWithPrediction(),
+        { ...NO_LINK, ...apiExtras },
+      );
+      app.ngOnInit();
+      vi.runAllTimers();
+      app.showResultsView('graphectory');
+      return app;
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it('reports the missing setting and does not upload', () => {
+    const upload = vi.fn();
+    const app = open({
+      getGraphectoryStatus: vi.fn(() => of({
+        configured: false, url: '', missing: ['GRAPHECTORY_URL'],
+      })),
+      uploadToGraphectory: upload,
+    });
+    expect(app.resultsView).toBe('graphectory');
+    expect(app.graphectoryConfigured).toBe(false);
+    expect(app.graphectoryMissing).toEqual(['GRAPHECTORY_URL']);
+    app.analyzeInGraphectory();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('goes uploading -> ready and uploads the selected run once, with no instance id', () => {
+    const upload = vi.fn(() => of({
+      graph: LINK, run_id: 'chain-4f7d9f56', log_name: 'prediction-chain-4f7d9f56.ndjson',
+    }));
+    const app = open({
+      getGraphectoryStatus: vi.fn(() => of(CONFIGURED)),
+      uploadToGraphectory: upload,
+    });
+    app.analyzeInGraphectory();
+    expect(upload).toHaveBeenCalledWith(PRED_PATH);
+    expect(app.graphectoryState).toBe('ready');
+    expect(app.graphectoryLink).toBe(LINK);
+  });
+
+  it('stays uploading until the API answers', () => {
+    const app = open({
+      getGraphectoryStatus: vi.fn(() => of(CONFIGURED)),
+      uploadToGraphectory: vi.fn(() => NEVER),
+    });
+    app.analyzeInGraphectory();
+    expect(app.graphectoryState).toBe('uploading');
+    // Switching run drops the pending upload.
+    app.selectRun('chain-4f7d9f56');
+    expect(app.graphectoryState).toBe('idle');
+  });
+
+  it("shows the server's message on an error", () => {
+    const app = open({
+      getGraphectoryStatus: vi.fn(() => of(CONFIGURED)),
+      uploadToGraphectory: vi.fn(() => throwError(() => ({
+        status: 502,
+        error: { detail: 'The Graphectory Viewer does not list run \'chain-4f7d9f56\' after reloading' },
+      }))),
+    });
+    app.analyzeInGraphectory();
+    expect(app.graphectoryState).toBe('error');
+    expect(app.graphectoryError).toBe('The Graphectory Viewer does not list run \'chain-4f7d9f56\' after reloading');
+  });
+
+  it('marks a 504 as unreachable or timed out', () => {
+    const app = open({
+      getGraphectoryStatus: vi.fn(() => of(CONFIGURED)),
+      uploadToGraphectory: vi.fn(() => throwError(() => ({
+        status: 504, error: { detail: 'Could not reach the Graphectory Viewer at https://viewer.example:9610: refused' },
+      }))),
+    });
+    app.analyzeInGraphectory();
+    expect(app.graphectoryState).toBe('unreachable');
+    expect(app.graphectoryError).toContain('Could not reach the Graphectory Viewer');
+  });
+
+  it('shows the link a past upload saved, without uploading again', () => {
+    const upload = vi.fn();
+    const saved = vi.fn(() => of({ graph: LINK }));
+    const app = open({
+      getGraphectoryStatus: vi.fn(() => of(CONFIGURED)),
+      getSavedGraphectoryLink: saved,
+      uploadToGraphectory: upload,
+    });
+    expect(saved).toHaveBeenCalledWith(PRED_PATH);
+    expect(app.graphectoryState).toBe('ready');
+    expect(app.graphectoryLink).toBe(LINK);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('stays idle when no link was saved', () => {
+    const app = open({ getGraphectoryStatus: vi.fn(() => of(CONFIGURED)) });
+    expect(app.graphectoryState).toBe('idle');
+    expect(app.graphectoryLink).toBe('');
+  });
+
+  it('opens the Viewer link in a new tab without an opener', () => {
+    const app = open({ getGraphectoryStatus: vi.fn(() => of(CONFIGURED)) });
+    const opener = vi.spyOn(window, 'open').mockReturnValue(null);
+    try {
+      app.openGraphectoryInNewTab(LINK);
+      expect(opener).toHaveBeenCalledWith(LINK, '_blank', 'noopener');
+    } finally {
+      opener.mockRestore();
     }
   });
 });

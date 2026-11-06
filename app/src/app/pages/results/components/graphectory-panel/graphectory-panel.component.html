@@ -1,0 +1,90 @@
+<draco-box title="Graphectory" [hasActions]="true" class="inner-box">
+  <div box-actions class="box-actions">
+    <draco-button size="sm" variant="primary" [disabled]="!canUpload"
+                title="Convert this run's inference event log (every instance in it) into the local Graphectory Viewer and show the run's graph"
+                (clicked)="analyze.emit()"><ng-icon name="graph" /> Analyze in Graphectory</draco-button>
+    <draco-button size="sm" [disabled]="state !== 'ready' || !href"
+                title="Open the run's Graphectory page in a new browser tab"
+                (clicked)="openInNewTab.emit(href)"><ng-icon name="externalLink" /> New tab</draco-button>
+  </div>
+
+  @if (configured === false) {
+    <div class="empty-state" data-state="not-configured">
+      <div class="empty-title">Graphectory is not configured.</div>
+      <div class="empty-body">
+        Set these in <code>opendraco/.env</code>, then restart the API:
+        <ul class="setting-list">
+          @for (setting of missingSettings; track setting.name) {
+            <li><code>{{ setting.name }}</code> {{ setting.role }}</li>
+          }
+        </ul>
+      </div>
+    </div>
+  } @else if (configured === null) {
+    @if (error) {
+      <div class="notice err" data-state="error">{{ error }}</div>
+    } @else {
+      <div class="empty-hint" data-state="checking">Checking the Graphectory configuration…</div>
+    }
+  } @else if (!selectedPredFile) {
+    <div class="empty-hint" data-state="no-prediction">No prediction selected</div>
+  } @else {
+    @switch (state) {
+      @case ('uploading') {
+        <div class="status-line" data-state="uploading">
+          <span class="spinner"></span>
+          Converting <code>{{ selectedPredFile.name }}</code> for Graphectory… the link appears when the Viewer lists it.
+        </div>
+      }
+      @case ('error') {
+        <div class="notice err" data-state="error">
+          <div class="notice-title">Graphectory could not take this run</div>
+          <div class="notice-body">{{ error }}</div>
+        </div>
+      }
+      @case ('unreachable') {
+        <div class="notice warn" data-state="unreachable">
+          <div class="notice-title">Graphectory is unreachable or timed out</div>
+          <div class="notice-body">{{ error }}</div>
+        </div>
+      }
+      @case ('ready') {
+        <div class="link-row" data-state="ready">
+          <code class="link-text" [title]="shownLink">{{ shownLink }}</code>
+          <draco-button size="sm" title="Copy the link to the clipboard"
+                        (clicked)="copyLink()"><ng-icon name="copy" /> Copy</draco-button>
+          @if (copyState !== 'idle') {
+            <span class="copy-note" [attr.data-copy]="copyState"
+                  [class.failed]="copyState === 'failed'">{{ copyState === 'copied' ? 'Copied' : 'Could not copy' }}</span>
+          }
+        </div>
+        @if (frameSrc) {
+          <!-- allow-same-origin is safe here only because the Viewer's origin
+               differs from the app's (see the component comment). -->
+          <iframe class="graph-frame"
+                  sandbox="allow-scripts allow-same-origin allow-popups"
+                  referrerpolicy="no-referrer"
+                  [title]="'Graphectory page of ' + selectedPredFile.name"
+                  [src]="frameSrc"></iframe>
+        } @else {
+          <div class="notice warn" data-note="same-origin">
+            <div class="notice-body">
+              {{ href
+                  ? 'The Viewer is served from the same origin as this app, so its page is not embedded here. Open the link instead.'
+                  : 'This link is not an http(s) address, so its page is not embedded or opened.' }}
+            </div>
+          </div>
+        }
+      }
+      @default {
+        <div class="empty-state" data-state="idle">
+          <div class="empty-title">Graphectory page for <code>{{ selectedPredFile.name }}</code></div>
+          <div class="empty-body">
+            <strong>Analyze in Graphectory</strong> converts this run's inference event log, with every
+            instance in it, and shows the run's graph from <code>{{ serverUrl }}</code> here.
+          </div>
+        </div>
+      }
+    }
+  }
+</draco-box>

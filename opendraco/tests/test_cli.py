@@ -15,7 +15,8 @@ job is to forward arguments correctly; the scripts have their own tests.
 from __future__ import annotations
 
 import re
-from typing import Callable
+from pathlib import Path
+from typing import Any, Callable
 
 import pytest
 import typer
@@ -629,6 +630,11 @@ def stub_status_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     to `docker info` or hits the network during unit tests."""
     monkeypatch.setattr(cli_mod, "_docker_daemon_running", lambda: True)
     monkeypatch.setattr(cli_mod, "_ollama_reachable", lambda url: True)
+    monkeypatch.setattr(cli_mod, "_graphectory_reachable", lambda url: True)
+    from opendraco.utils import graphectory
+    monkeypatch.setattr(cli_mod, "_graphectory_container_status", lambda: graphectory.ContainerStatus(
+        image=True, exists=True, running=True, data_dir=str(graphectory.DATA_DIR), ports=("9610",),
+    ))
 
 
 def test_status_reports_sections(
@@ -645,6 +651,135 @@ def test_status_reports_sections(
     ):
         assert section in out, f"missing section {section!r}:\n{out}"
     assert "Integration tests" not in out
+
+
+@pytest.mark.parametrize("value", [None, "", '""'])
+def test_status_says_how_to_enable_graphectory_when_unset(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+    value: str | None,
+) -> None:
+    """With no GRAPHECTORY_URL the check is a warning that names the setting,
+    not a failure: Graphectory is optional. Nothing is probed, and the
+    converter / image lines are left out."""
+    if value is None:
+        monkeypatch.delenv("GRAPHECTORY_URL", raising=False)
+    else:
+        monkeypatch.setenv("GRAPHECTORY_URL", value)
+    probed: list[str] = []
+    monkeypatch.setattr(cli_mod, "_graphectory_reachable", lambda url: probed.append(url) or True)
+    result = _invoke(runner, ["status"])
+    assert result.exit_code == 0, result.output
+    line = next(l for l in result.output.splitlines() if "graphectory server" in l)
+    assert "[WARN]" in line and "not configured" in line
+    assert "GRAPHECTORY_URL" in line and "opendraco/.env" in line
+    assert probed == []
+    assert "graphectory image" not in result.output
+    assert "graphectory container" not in result.output
+    assert "INGEST" not in result.output
+
+
+def test_status_reports_a_reachable_graphectory_server(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GRAPHECTORY_URL", "https://graphectory.example:9610/")
+    seen: list[str] = []
+    monkeypatch.setattr(
+        cli_mod, "_graphectory_reachable", lambda url: seen.append(url) or True,
+    )
+    result = _invoke(runner, ["status"])
+    assert result.exit_code == 0, result.output
+    line = next(l for l in result.output.splitlines() if "graphectory server" in l)
+    assert "[ OK ]" in line and "https://graphectory.example:9610" in line
+    assert seen == ["https://graphectory.example:9610"]
+
+
+def test_status_warns_when_graphectory_does_not_answer(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GRAPHECTORY_URL", "https://127.0.0.1:9")
+    monkeypatch.setattr(cli_mod, "_graphectory_reachable", lambda url: False)
+    result = _invoke(runner, ["status"])
+    assert result.exit_code == 0, result.output
+    line = next(l for l in result.output.splitlines() if "graphectory server" in l)
+    assert "[WARN]" in line and "not reachable at https://127.0.0.1:9" in line
+    # The Viewer has no /docs; it is probed with GET / and the hint says so.
+    assert "/docs" not in line and "GET /" in line
+    assert "graphectory-viewer" in line
+
+
+def _graphectory_lines(runner: CliRunner) -> dict[str, str]:
+    result = _invoke(runner, ["status"])
+    assert result.exit_code == 0, result.output
+    return {name: next(l for l in result.output.splitlines() if f"graphectory {name}" in l)
+            for name in ("image", "container")}
+
+
+def _container_status(**fields: Any):
+    from opendraco.utils import graphectory
+    base = dict(image=True, exists=True, running=True,
+                data_dir=str(graphectory.DATA_DIR), ports=("9610",))
+    return graphectory.ContainerStatus(**(base | fields))
+
+
+def test_status_reports_a_matching_running_container(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GRAPHECTORY_URL", "http://localhost:9610")
+    lines = _graphectory_lines(runner)
+    assert "[ OK ]" in lines["image"]
+    assert "[ OK ]" in lines["container"] and "running on port 9610" in lines["container"]
+
+
+def test_status_gives_the_build_and_run_commands_when_nothing_exists(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GRAPHECTORY_URL", "http://localhost:9611")
+    monkeypatch.setattr(cli_mod, "_graphectory_container_status",
+                        lambda: _container_status(image=False, exists=False, running=False))
+    lines = _graphectory_lines(runner)
+    assert "[WARN]" in lines["image"] and "docker build -t graphectory Graphectory" in lines["image"]
+    assert "[WARN]" in lines["container"] and "does not exist" in lines["container"]
+    assert "docker run -d --name graphectory-viewer" in lines["container"]
+    assert "-p 9611:9610" in lines["container"]
+
+
+def test_status_says_how_to_start_a_stopped_container(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GRAPHECTORY_URL", "http://localhost:9610")
+    monkeypatch.setattr(cli_mod, "_graphectory_container_status",
+                        lambda: _container_status(running=False))
+    line = _graphectory_lines(runner)["container"]
+    assert "[WARN]" in line and "docker start graphectory-viewer" in line
+
+
+@pytest.mark.parametrize("mismatch", ["port", "data"])
+def test_status_names_a_container_for_another_port_or_folder(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, mismatch: str,
+) -> None:
+    """The container is reported, never changed: the line gives the docker
+    commands to re-create it."""
+    monkeypatch.setenv("GRAPHECTORY_URL", "http://localhost:9610")
+    other = (dict(ports=("9612",)) if mismatch == "port"
+             else dict(data_dir=str(tmp_path / "graphectory-data")))
+    monkeypatch.setattr(cli_mod, "_graphectory_container_status", lambda: _container_status(**other))
+    line = _graphectory_lines(runner)["container"]
+    assert "[WARN]" in line
+    assert ("publishes port 9612" in line) if mismatch == "port" else ("graphectory-data" in line)
+    assert "docker rm -f graphectory-viewer; docker run" in line and "&&" not in line
+
+
+def test_status_without_docker(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from opendraco.utils import graphectory
+    monkeypatch.setenv("GRAPHECTORY_URL", "http://localhost:9610")
+    monkeypatch.setattr(cli_mod, "_graphectory_container_status",
+                        lambda: graphectory.ContainerStatus(docker=False))
+    result = _invoke(runner, ["status"])
+    line = next(l for l in result.output.splitlines() if "graphectory image" in l)
+    assert "[WARN]" in line and "docker CLI not available" in line
 
 
 # ─── help-text examples ──────────────────────────────────────────────────────

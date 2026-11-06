@@ -500,13 +500,77 @@ def _ollama_reachable(url: str) -> Optional[bool]:
         return False
 
 
+def _graphectory_reachable(url: str) -> bool:
+    """True if the Graphectory Viewer at `url` answers `GET /` with 200. Kept
+    as a module-level seam so tests can stub the network probe."""
+    from opendraco.utils.graphectory import graphectory_reachable
+    return graphectory_reachable(url)
+
+
+def _graphectory_container_status():
+    """The Graphectory image + `graphectory-viewer` container state (read
+    only). A module-level seam like `_graphectory_reachable`."""
+    from opendraco.utils.graphectory import viewer_container_status
+    return viewer_container_status()
+
+
+def _print_graphectory_container(graphectory_url: str) -> None:
+    """The `graphectory image` / `graphectory container` checks: what exists,
+    whether it runs, and whether its port and /data match GRAPHECTORY_URL
+    and `<RESULTS_DIR>/graphectory`. Every problem names the docker command
+    that fixes it; OpenDraco itself never changes the container."""
+    from opendraco.utils import graphectory
+    status = _graphectory_container_status()
+    if not status.docker:
+        _print_check(_WARN, "graphectory image", "docker CLI not available to check")
+        return
+    if status.image:
+        _print_check(_OK, "graphectory image", f"'{graphectory.IMAGE}' built")
+    else:
+        _print_check(
+            _WARN, "graphectory image",
+            f"'{graphectory.IMAGE}' not built -- {graphectory.BUILD_COMMAND}",
+        )
+    port = graphectory.viewer_port(graphectory_url) or graphectory.CONTAINER_PORT
+    create = graphectory.run_command(port)
+    name = graphectory.CONTAINER
+    if not status.exists:
+        _print_check(_WARN, "graphectory container", f"'{name}' does not exist -- {create}")
+        return
+    problems = []
+    if str(port) not in status.ports:
+        problems.append(
+            f"publishes port {', '.join(status.ports) or 'none'}, GRAPHECTORY_URL uses {port}"
+        )
+    if not status.mounts_data_dir():
+        problems.append(
+            f"mounts {status.data_dir or 'nothing'} as /data, OpenDraco writes runs to "
+            f"{graphectory.DATA_DIR}"
+        )
+    if problems:
+        _print_check(
+            _WARN, "graphectory container",
+            f"'{name}' " + "; ".join(problems)
+            + f" -- re-create it: docker rm -f {name}; {create}",
+        )
+    elif not status.running:
+        _print_check(_WARN, "graphectory container", f"'{name}' stopped -- docker start {name}")
+    else:
+        _print_check(
+            _OK, "graphectory container",
+            f"'{name}' running on port {port}, /data = {graphectory.DATA_DIR}",
+        )
+
+
 @app.command(
     "status",
     help=(
         "Doctor-style readiness check (read-only): prerequisites (python, "
         "git, ollama, docker, node), the .env files, the ~/.opendraco-venv, the "
-        "SWE-bench clone + its harness venv, and whether the Docker daemon "
-        "and Ollama server are reachable."
+        "SWE-bench clone + its harness venv, and whether the Docker daemon, "
+        "the Ollama server and the optional Graphectory Viewer (GET /) are "
+        "reachable; with GRAPHECTORY_URL set, also the Graphectory Docker "
+        "image and the graphectory-viewer container (read only)."
         "\n\nExample:  opendraco status"
     ),
 )
@@ -590,6 +654,26 @@ def status() -> None:
         _print_check(_OK, "ollama server", ollama_url)
     else:
         _print_check(_WARN, "ollama server", f"not reachable at {ollama_url}")
+
+    # Optional: the Results page's Graphectory tab (docs/graphectory_local.md).
+    from opendraco.utils import graphectory
+    graphectory_url = graphectory.graphectory_base_url()
+    if not graphectory_url:
+        _print_check(
+            _WARN, "graphectory server",
+            "not configured (optional) -- set GRAPHECTORY_URL in opendraco/.env "
+            '(e.g. "http://localhost:9610") to show Graphectory on the Results page',
+        )
+    else:
+        if _graphectory_reachable(graphectory_url):
+            _print_check(_OK, "graphectory server", graphectory_url)
+        else:
+            _print_check(
+                _WARN, "graphectory server",
+                f"not reachable at {graphectory_url} -- is the "
+                f"'{graphectory.CONTAINER}' container running? (it must answer GET / with 200)",
+            )
+        _print_graphectory_container(graphectory_url)
 
     typer.echo("")
     raise typer.Exit(0)

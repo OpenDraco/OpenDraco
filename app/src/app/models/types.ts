@@ -262,6 +262,32 @@ export interface ResultEvaluation {
   summary_path: string;
 }
 
+/** `GET /api/results/graphectory` — whether Graphectory is enabled. */
+export interface GraphectoryStatus {
+  /** `GRAPHECTORY_URL` is set. */
+  configured: boolean;
+  /** `GRAPHECTORY_URL`, the local Graphectory Viewer, e.g.
+   * `http://localhost:9610`; '' when not set. */
+  url: string;
+  /** `["GRAPHECTORY_URL"]` when it is not set, else empty. */
+  missing: string[];
+}
+
+/** `POST /api/results/prediction/graphectory` — a run's log was
+ * uploaded; `graph` is the run's page in the Viewer. */
+export interface GraphectoryUpload {
+  graph: string;
+  run_id: string;
+  /** The inference `.ndjson` that was uploaded. */
+  log_name: string;
+}
+
+/** `GET /api/results/prediction/graphectory` — the link a past upload of
+ * the run saved, or `null`. */
+export interface GraphectoryLink {
+  graph: string | null;
+}
+
 // ─── Agent types (live catalog from /api/agent-types) ──────────────
 export interface AgentType {
   type: string;

@@ -1,7 +1,8 @@
 """Results-page endpoints: browse past inference + evaluation runs,
 fetch their per-file artefacts (prediction JSONL, text log, NDJSON
 sidecar, config snapshot), generate the reproduce-this-run Jupyter
-notebook, and reveal paths in the OS file explorer."""
+notebook, publish a run to Graphectory, and reveal paths in the OS
+file explorer."""
 from __future__ import annotations
 
 import io
@@ -9,6 +10,7 @@ import json
 import subprocess
 import sys
 import zipfile
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -22,8 +24,10 @@ from api.common import (
     PREDICTION_TEXT_LOGS_DIR,
     PREDICTIONS_DIR,
     RESULTS_DIR,
+    logger,
     safe_under,
 )
+from opendraco.utils import graphectory
 from opendraco.utils.instances import instance_memberships
 from opendraco.utils.notebook import build_notebook_for_prediction
 from opendraco.utils.predictions import (
@@ -128,6 +132,104 @@ def get_prediction_ndjson(path: str) -> dict[str, Any]:
         "exists": True,
         "raw": ndjson_path.read_text(encoding="utf-8", errors="replace"),
     }
+
+# ─── Graphectory upload ──────────────────────────────────────────────────────
+_PREDICTION_STEM_PREFIX = "prediction-"
+
+
+@router.get("/api/results/graphectory")
+def get_graphectory_status() -> dict[str, Any]:
+    """Whether Graphectory is enabled: `GRAPHECTORY_URL` (the local Viewer)
+    is set. The Results page names it in `missing` before anyone clicks."""
+    viewer_url = graphectory.graphectory_base_url()
+    return {
+        "configured": bool(viewer_url),
+        "url": viewer_url,
+        "missing": [] if viewer_url else ["GRAPHECTORY_URL"],
+    }
+
+
+def _graphectory_prediction_path(path: str) -> Path:
+    """Prediction `.jsonl` (traversal-checked). 404 when it is missing."""
+    p = safe_under(PREDICTIONS_DIR, path)
+    if not p.is_file():
+        raise HTTPException(404, "prediction file not found")
+    return p
+
+
+def _graphectory_link_path(prediction: Path) -> Path:
+    """`<stem>.graphectory-link.json`, beside the run's inference `.ndjson`."""
+    return INFERENCE_INTERNAL_LOGS_DIR / f"{prediction.stem}.graphectory-link.json"
+
+
+@router.post("/api/results/prediction/graphectory")
+def upload_prediction_to_graphectory(payload: dict[str, str]) -> dict[str, Any]:
+    """Convert a run's inference `.ndjson` into the local Graphectory Viewer
+    (`opendraco.utils.graphectory.publish_run`) and return the run's Viewer
+    link. `path` is the sibling prediction `.jsonl`. The log holds every
+    instance, so the run is published once, under its sanitised run id. The
+    link is also saved as `<stem>.graphectory-link.json` beside the log.
+
+    Waits until the Viewer lists the run. Errors always carry a message in
+    `detail`: 400 bad input or a log the converter cannot use, 404 missing
+    log, 500 the data folder is not writable, 502 the Viewer did not reload,
+    503 `GRAPHECTORY_URL` unset or invalid, 504 the Viewer is unreachable."""
+    viewer_url = graphectory.graphectory_base_url()
+    if not viewer_url:
+        raise HTTPException(
+            503, "Graphectory is not configured: set GRAPHECTORY_URL (e.g. "
+                 "\"http://localhost:9610\") in opendraco/.env and restart the API",
+        )
+    path = payload.get("path") or ""
+    if not path:
+        raise HTTPException(400, "path is required")
+    prediction = _graphectory_prediction_path(path)
+    ndjson_path = INFERENCE_INTERNAL_LOGS_DIR / f"{prediction.stem}.ndjson"
+    if not ndjson_path.is_file():
+        raise HTTPException(
+            404, f"inference log {ndjson_path.name} not found - re-run inference to capture one",
+        )
+    log_text = ndjson_path.read_text(encoding="utf-8", errors="replace")
+    if not log_text.strip():
+        raise HTTPException(400, f"inference log {ndjson_path.name} is empty")
+
+    # Same id the end-of-run publish gives this run (`<config>-<uid>`).
+    run_id = graphectory.safe_run_id(prediction.stem.removeprefix(_PREDICTION_STEM_PREFIX))
+    try:
+        graph = graphectory.publish_run(viewer_url, run_id, run_id, log_text)
+    except graphectory.GraphectoryError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    try:
+        _graphectory_link_path(prediction).write_text(
+            json.dumps({"graph": graph, "run_id": run_id}, indent=2), encoding="utf-8",
+        )
+    except OSError as exc:
+        # The link is a convenience; the publish itself worked.
+        logger.warning("could not save the Graphectory link for %s: %s", prediction.name, exc)
+    return {"graph": graph, "run_id": run_id, "log_name": ndjson_path.name}
+
+
+@router.get("/api/results/prediction/graphectory")
+def get_saved_graphectory_link(path: str) -> dict[str, Any]:
+    """The link a past publish of this run saved, or `{"graph": null}` when
+    there is none, the file is unusable, Graphectory is not configured, or
+    the link is on another Viewer than the current `GRAPHECTORY_URL` (saved
+    before the setting changed: the run is treated as not published there
+    yet). `path` is the prediction `.jsonl`."""
+    prediction = _graphectory_prediction_path(path)
+    viewer_url = graphectory.graphectory_base_url()
+    if not viewer_url:
+        return {"graph": None}
+    try:
+        saved = json.loads(_graphectory_link_path(prediction).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"graph": None}
+    graph = saved.get("graph") if isinstance(saved, dict) else None
+    if not isinstance(graph, str) or not graph:
+        return {"graph": None}
+    if not graphectory.is_on_viewer(graph, viewer_url):
+        return {"graph": None}
+    return {"graph": graph}
 
 
 @router.get("/api/results/prediction/config")
