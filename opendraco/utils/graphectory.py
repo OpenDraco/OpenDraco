@@ -3,20 +3,22 @@
 Graphectory turns a recorded agent run into an interactive trajectory
 graph. Everything runs on this machine:
 
-- the **converter** (`opendraco.utils.graphectory_converter`, from
-  graphectory-opendraco) turns a run's inference event log
-  (`opendraco/logs/inference_logs/<stem>.ndjson`) into one trajectory, which
-  `publish_run` writes into `<RESULTS_DIR>/graphectory/<run_id>/`;
+- every inference run is recorded as ATIF (`opendraco.utils.atif`): one
+  `trajectory.json` per instance under
+  `opendraco/logs/inference_logs/<stem>/<instance_id>/`. `publish_run`
+  copies them into `<RESULTS_DIR>/graphectory/<run_id>/<instance_id>/`;
 - the **Viewer** (`GRAPHECTORY_URL`, e.g. `http://localhost:9610`) is the
-  Graphectory Docker container `graphectory-viewer`, made from the
-  `graphectory` image with that folder as its `/data`. OpenDraco never
-  starts, creates or removes it: it is built and run with plain docker
-  commands (`BUILD_COMMAND`, `run_command`), and `viewer_container_status`
-  only reads its state for `opendraco status`. `GET /` is the Viewer's
-  liveness check.
+  Graphectory Docker container `graphectory-viewer`, built from the ATIF
+  fork (`GRAPHECTORY_REPO`, branch `GRAPHECTORY_BRANCH`) with that folder as
+  its `/data`. It reads ATIF directly (one graph per instance, id =
+  `trajectory_id` = `<run_id>.<instance_id>`), so OpenDraco ships no
+  converter. OpenDraco never starts, creates or removes the container: it is
+  built and run with plain docker commands (`BUILD_COMMAND`, `run_command`),
+  and `viewer_container_status` only reads its state for `opendraco status`.
+  `GET /` is the Viewer's liveness check.
 
 `GRAPHECTORY_URL` unset or empty disables all of it. Runs that end are
-published in the background by `publish_run_log` (best-effort, never
+published in the background by `publish_run_dir` (best-effort, never
 raises); the Results page's button calls `publish_run`, which raises
 `GraphectoryError` so the page can show why it failed.
 
@@ -30,6 +32,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import ssl
 import subprocess
 import threading
@@ -37,17 +40,16 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import SplitResult, urlsplit
+from urllib.parse import SplitResult, quote, urlsplit
 
 import certifi
 
 from opendraco.paths import RESULTS_DIR
-from opendraco.utils.graphectory_converter import ConvertError, run_to_session
 
 logger = logging.getLogger(__name__)
 
 # ─── Layout ──────────────────────────────────────────────────────────────────
-# The converted runs; the Viewer's container mounts this folder as /data.
+# The published ATIF runs; the Viewer's container mounts this folder as /data.
 DATA_DIR: Path = RESULTS_DIR / "graphectory"
 # The data folder's path inside the Viewer's container.
 VIEWER_DATA_PATH = "/data"
@@ -55,11 +57,15 @@ IMAGE = "graphectory"
 CONTAINER = "graphectory-viewer"
 # The port the Viewer listens on inside the container.
 CONTAINER_PORT = 9610
-GRAPHECTORY_REPO = "https://github.com/Intelligent-CAT-Lab/Graphectory.git"
+# The Viewer must read ATIF: the owner's fork, branch feat/atif-mas (stock
+# upstream Graphectory cannot).
+GRAPHECTORY_REPO = "https://github.com/xiangfengyepan/Graphectory.git"
+GRAPHECTORY_BRANCH = "feat/atif-mas"
 # Joined with `;`, which bash and PowerShell both accept (`&&` is not valid
 # in Windows PowerShell 5.1).
 BUILD_COMMAND = (
-    f"git clone {GRAPHECTORY_REPO} Graphectory; docker build -t {IMAGE} Graphectory"
+    f"git clone -b {GRAPHECTORY_BRANCH} {GRAPHECTORY_REPO} Graphectory; "
+    f"docker build -t {IMAGE} Graphectory"
 )
 
 
@@ -138,33 +144,50 @@ def is_on_viewer(link: str, viewer_url: str) -> bool:
     return _origin(parts) == _origin(urlsplit(viewer_url.strip()))
 
 
-def graph_link(viewer_url: str, run_id: str) -> str:
-    return f"{viewer_url.rstrip('/')}/api/graph?id={run_id}"
+def graph_link(viewer_url: str, graph_id: str) -> str:
+    return f"{viewer_url.rstrip('/')}/api/graph?id={quote(graph_id, safe='')}"
 
 
-# ─── Converter ───────────────────────────────────────────────────────────────
-def convert_run(run_id: str, log_bytes: bytes, title: str | None = None) -> tuple[dict, list[dict]]:
-    """`(state.json dict, wire.jsonl records)` for one OpenDraco run. Raises
-    `GraphectoryError` (400) for a log the converter cannot use."""
-    try:
-        return run_to_session("opendraco", run_id, log_bytes, title)
-    except ConvertError as exc:
-        raise GraphectoryError(400, f"Graphectory could not convert the run: {exc}") from exc
+# ─── The Viewer's data folder ────────────────────────────────────────────────
+LINKS_FILE = "graphectory-links.json"
 
 
-def write_session(data_dir: Path, run_id: str, state: dict, records: list[dict]) -> Path:
-    """`<data_dir>/<run_id>/state.json` + `agents/main/wire.jsonl`, the
-    Claude Code session layout the stock Viewer reads."""
-    session = data_dir / run_id
-    (session / "agents" / "main").mkdir(parents=True, exist_ok=True)
-    (session / "state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
-    with open(session / "agents" / "main" / "wire.jsonl", "w", encoding="utf-8") as f:
-        for record in records:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    return session
+def clear_legacy_sessions(data_dir: Path) -> int:
+    """Remove the Claude Code sessions the old converter wrote (`state.json`
+    + `agents/`): the Viewer reads one format per folder and those would hide
+    every ATIF run. Returns how many were removed."""
+    if not data_dir.is_dir():
+        return 0
+    removed = 0
+    for child in data_dir.iterdir():
+        if child.is_dir() and (child / "state.json").is_file() and (child / "agents").is_dir():
+            shutil.rmtree(child, ignore_errors=True)
+            removed += 1
+    return removed
 
 
-# ─── Viewer HTTP ─────────────────────────────────────────────────────────────
+def _run_trajectories(run_dir: Path) -> list[tuple[str, Path, dict]]:
+    """`(instance_id, path, doc)` for every ATIF file of a run folder."""
+    out: list[tuple[str, Path, dict]] = []
+    for path in sorted(Path(run_dir).glob("*/trajectory.json")):
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict) and isinstance(doc.get("trajectory_id"), str):
+            out.append((path.parent.name, path, doc))
+    return out
+
+
+def _copy_world_readable(src: Path, dst: Path) -> None:
+    for parent in reversed(dst.parents):
+        if not parent.exists():
+            parent.mkdir(exist_ok=True)
+            os.chmod(parent, 0o755)
+    shutil.copyfile(src, dst)
+    os.chmod(dst, 0o644)
+
+
 def _tls_context() -> ssl.SSLContext:
     """The system trust store plus certifi's bundle. On some Windows
     machines OpenSSL builds the chain of a current Let's Encrypt
@@ -212,13 +235,19 @@ def graphectory_reachable(base_url: str) -> bool:
     return _probe_ok(base_url, STATUS_PATH, "text/html")
 
 
+def _check_viewer_url(viewer_url: str) -> SplitResult:
+    """`viewer_url` split, or `GraphectoryError` 503 when it is not http(s)."""
+    parts = urlsplit(viewer_url.strip())
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise GraphectoryError(503, f"GRAPHECTORY_URL is not an http(s) URL: {viewer_url!r}")
+    return parts
+
+
 def _viewer_json(viewer_url: str, method: str, path: str, body: Any = None) -> Any:
     """One JSON request to the Viewer. Raises `GraphectoryError`: 503 for a
     bad `GRAPHECTORY_URL`, 504 when the Viewer is unreachable, 502 for an
     error status or an answer that is not JSON."""
-    parts = urlsplit(viewer_url.strip())
-    if parts.scheme not in ("http", "https") or not parts.hostname:
-        raise GraphectoryError(503, f"GRAPHECTORY_URL is not an http(s) URL: {viewer_url!r}")
+    parts = _check_viewer_url(viewer_url)
     try:
         conn = _new_connection(parts, VIEWER_TIMEOUT_S)
     except ValueError as exc:
@@ -253,68 +282,82 @@ def _viewer_json(viewer_url: str, method: str, path: str, body: Any = None) -> A
     return answer
 
 
-def reload_viewer(viewer_url: str, run_id: str | None = None) -> None:
+def reload_viewer(viewer_url: str, ids: list[str] | None = None) -> None:
     """Point the Viewer at its data folder again (it reads the folder when
-    its data source is set) and, with `run_id`, wait until it lists that
-    run. Raises `GraphectoryError`."""
+    its data source is set) and, with `ids`, wait until it lists every one
+    of those graphs. Raises `GraphectoryError`."""
     answer = _viewer_json(
         viewer_url, "POST", "/api/config", {"trajs": VIEWER_DATA_PATH, "eval_report": ""},
     )
     if not isinstance(answer, dict) or not answer.get("ok"):
         raise GraphectoryError(502, f"The Graphectory Viewer refused its data folder: {answer}")
-    if run_id is None:
+    if not ids:
         return
     deadline = time.monotonic() + LIST_WAIT_S
     while True:
         listing = _viewer_json(viewer_url, "GET", "/api/graphs")
         graphs = listing.get("graphs") if isinstance(listing, dict) else None
-        if any(isinstance(g, dict) and g.get("instance_id") == run_id for g in graphs or []):
+        listed = {g.get("instance_id") for g in graphs or [] if isinstance(g, dict)}
+        missing = [i for i in ids if i not in listed]
+        if not missing:
             return
         if (isinstance(listing, dict) and listing.get("status") == "complete") \
                 or time.monotonic() > deadline:
             raise GraphectoryError(
-                502, f"The Graphectory Viewer does not list run {run_id!r} after reloading -- "
-                     f"its container must mount {DATA_DIR} as /data (`opendraco status` "
-                     "shows what it mounts)",
+                502, f"The Graphectory Viewer does not list {missing} after reloading -- "
+                     f"it can't read ATIF or doesn't mount {DATA_DIR} as /data "
+                     "(`opendraco status` shows what it mounts). Rebuild it from "
+                     f"xiangfengyepan/Graphectory {GRAPHECTORY_BRANCH}: {BUILD_COMMAND}",
             )
         time.sleep(0.5)
 
 
 # ─── Publishing a run ────────────────────────────────────────────────────────
-def publish_run(viewer_url: str, run_id: str, title: str, log_text: str,
-                data_dir: Path | None = None) -> str:
-    """Convert a run's whole inference log, write it into the Viewer's data
-    folder, reload the Viewer until it lists the run, and return the run's
-    graph link. `run_id` is sanitised with `safe_run_id`.
+def publish_run(viewer_url: str, run_dir: Path, data_dir: Path | None = None) -> dict[str, str]:
+    """Copy a run's ATIF trajectories (`<run_dir>/<instance_id>/trajectory.json`)
+    into the Viewer's data folder, remove old converter-made sessions there,
+    reload the Viewer until it lists every instance, save the links as
+    `<run_dir>/graphectory-links.json` and return `{instance_id: link}`.
 
-    Raises `GraphectoryError`: 400 a log the converter cannot use, 500 the
+    Raises `GraphectoryError`: 404 no trajectories in `run_dir`, 500 the
     data folder is not writable, 503 a bad `GRAPHECTORY_URL`, 502/504 the
-    Viewer did not reload or answer."""
-    run_id = safe_run_id(run_id)
-    state, records = convert_run(run_id, log_text.encode("utf-8"), title)
+    Viewer did not reload, answer or list the run."""
+    run_dir = Path(run_dir)
+    trajectories = _run_trajectories(run_dir)
+    if not trajectories:
+        raise GraphectoryError(404, f"no ATIF trajectories in {run_dir.name}")
+    _check_viewer_url(viewer_url)
+    target = data_dir or DATA_DIR
+    run_id = safe_run_id(str(trajectories[0][2].get("session_id") or run_dir.name))
     with _publish_lock:
         try:
-            write_session(data_dir or DATA_DIR, run_id, state, records)
+            clear_legacy_sessions(target)
+            for iid, path, _doc in trajectories:
+                _copy_world_readable(path, target / run_id / safe_run_id(iid) / "trajectory.json")
         except OSError as exc:
-            raise GraphectoryError(
-                500, f"Could not write the run into {data_dir or DATA_DIR}: {exc}",
-            ) from exc
-        reload_viewer(viewer_url, run_id)
-    return graph_link(viewer_url, run_id)
+            raise GraphectoryError(500, f"Could not write the run into {target}: {exc}") from exc
+        reload_viewer(viewer_url, [doc["trajectory_id"] for _, _, doc in trajectories])
+    links = {iid: graph_link(viewer_url, doc["trajectory_id"]) for iid, _, doc in trajectories}
+    try:
+        (run_dir / LINKS_FILE).write_text(json.dumps({"links": links}, indent=2), encoding="utf-8")
+    except OSError as exc:  # the links are a convenience; the publish worked
+        logger.warning("could not save the Graphectory links for %s: %s", run_dir.name, exc)
+    return links
 
 
-def publish_run_log(viewer_url: str, run_id: str, title: str, log_text: str) -> str | None:
+def publish_run_dir(viewer_url: str, run_dir: Path) -> dict[str, str] | None:
     """`publish_run` for a finished run. Best-effort: never raises; a
     failure is logged as a warning and gives `None`, a success logs the
-    graph link at INFO."""
-    safe_id = safe_run_id(run_id)
+    graph links at INFO."""
+    name = Path(run_dir).name.removeprefix("prediction-")
     try:
-        graph = publish_run(viewer_url, run_id, title, log_text)
+        links = publish_run(viewer_url, Path(run_dir))
     except Exception as exc:  # nothing about a failed publish may reach the run
-        logger.warning("Graphectory publish of run %s failed: %s", safe_id, exc)
+        logger.warning("Graphectory publish of run %s failed: %s", name, exc)
         return None
-    logger.info("Graphectory graph for run %s: %s", safe_id, graph)
-    return graph
+    for iid, link in links.items():
+        logger.info("Graphectory graph for run %s, instance %s: %s", name, iid, link)
+    return links
 
 
 # ─── The Viewer's container (read-only) ──────────────────────────────────────

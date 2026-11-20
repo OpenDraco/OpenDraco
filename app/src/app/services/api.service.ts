@@ -2,11 +2,26 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
-  UnifiedConfig, ConfigSummary, Instance, InferenceEvent, EvalEvent,
-  ResultInstance, ResultPrediction, ResultEvaluation, ToolDescriptor,
-  AgentType, AgentVariant, PredictionInspection, OllamaModel,
-  ConfigHistoryEntry, ConfigRunMatch, OpendracoPaths,
-  GraphectoryStatus, GraphectoryUpload, GraphectoryLink,
+  UnifiedConfig,
+  ConfigSummary,
+  Instance,
+  InferenceEvent,
+  EvalEvent,
+  ResultInstance,
+  ResultPrediction,
+  ResultEvaluation,
+  ToolDescriptor,
+  AgentType,
+  AgentVariant,
+  PredictionInspection,
+  OllamaModel,
+  ConfigHistoryEntry,
+  ConfigRunMatch,
+  OpendracoPaths,
+  GraphectoryStatus,
+  GraphectoryUpload,
+  GraphectoryLink,
+  AtifTrajectory,
 } from '../models/types';
 
 const BASE = 'http://localhost:8000/api';
@@ -181,12 +196,14 @@ export class ApiService {
     );
   }
 
-  /** Internal NDJSON SSE log — same stream the Inference page consumes
-   * live, replayed for completed runs in the Results modal. */
-  getResultPredictionNdjson(path: string): Observable<{ path: string; name: string; exists: boolean; raw: string }> {
-    return this.http.get<{ path: string; name: string; exists: boolean; raw: string }>(
-      `${BASE}/results/prediction/ndjson?path=${encodeURIComponent(path)}`,
-    );
+  /** One instance's ATIF trajectory of a completed run (the stored run
+   * log), rendered by the Results modal. No `instanceId` = first instance. */
+  getResultTrajectory(path: string, instanceId?: string): Observable<{
+    path: string; name: string; exists: boolean; trajectory: AtifTrajectory | null;
+  }> {
+    let url = `${BASE}/results/prediction/trajectory?path=${encodeURIComponent(path)}`;
+    if (instanceId) url += `&instance_id=${encodeURIComponent(instanceId)}`;
+    return this.http.get<{ path: string; name: string; exists: boolean; trajectory: AtifTrajectory | null }>(url);
   }
 
   /** Which Graphectory settings the backend has. */
@@ -194,18 +211,19 @@ export class ApiService {
     return this.http.get<GraphectoryStatus>(`${BASE}/results/graphectory`);
   }
 
-  /** Have the backend convert the run's inference log into the local
-   * Graphectory Viewer and get the run's Viewer link back. */
+  /** Have the backend publish the run's ATIF trajectories into the local
+   * Graphectory Viewer and get one Viewer link per instance back. */
   uploadToGraphectory(path: string): Observable<GraphectoryUpload> {
     return this.http.post<GraphectoryUpload>(
       `${BASE}/results/prediction/graphectory`, { path },
     );
   }
 
-  /** The Viewer link a past upload of this run saved, if any. */
-  getSavedGraphectoryLink(path: string): Observable<GraphectoryLink> {
+  /** The Viewer link a past upload of this run saved for one instance, if any. */
+  getSavedGraphectoryLink(path: string, instanceId: string): Observable<GraphectoryLink> {
     return this.http.get<GraphectoryLink>(
-      `${BASE}/results/prediction/graphectory?path=${encodeURIComponent(path)}`,
+      `${BASE}/results/prediction/graphectory?path=${encodeURIComponent(path)}`
+      + `&instance_id=${encodeURIComponent(instanceId)}`,
     );
   }
 
@@ -359,7 +377,8 @@ export class ApiService {
     run_id?: string;
     config_label?: string;
     instance_ids?: string[];
-    log_path?: string;
+    /** The run's ATIF folder (`<stem>`) under the inference logs. */
+    run_dir?: string;
     started_at?: number;
   }> {
     return this.http.get<{
@@ -367,16 +386,23 @@ export class ApiService {
       run_id?: string;
       config_label?: string;
       instance_ids?: string[];
-      log_path?: string;
+      run_dir?: string;
       started_at?: number;
     }>(`${BASE}/inference/active`);
   }
 
-  /** Tail bytes of the internal NDJSON log past `offset`. */
-  getInferenceLogTail(path: string, offset: number): Observable<{ raw: string; offset: number; is_running: boolean }> {
-    return this.http.get<{ raw: string; offset: number; is_running: boolean }>(
-      `${BASE}/inference/log-tail?path=${encodeURIComponent(path)}&offset=${offset}`,
-    );
+  /** One instance's current ATIF trajectory of a run in progress. With
+   * `sinceMtime` equal to the file's mtime the answer is `unchanged: true`
+   * and carries no document. */
+  getInferenceTrajectory(runDir: string, instanceId: string, sinceMtime?: number): Observable<{
+    trajectory: AtifTrajectory | null; mtime: number; unchanged: boolean; is_running: boolean;
+  }> {
+    let url = `${BASE}/inference/trajectory?run_dir=${encodeURIComponent(runDir)}`
+      + `&instance_id=${encodeURIComponent(instanceId)}`;
+    if (sinceMtime != null) url += `&since_mtime=${sinceMtime}`;
+    return this.http.get<{
+      trajectory: AtifTrajectory | null; mtime: number; unchanged: boolean; is_running: boolean;
+    }>(url);
   }
 
   cancelEvaluation(predictionsPath: string): Observable<{ ok: boolean }> {

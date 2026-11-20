@@ -1,5 +1,5 @@
 /** Full-screen modal that mounts the shared `<app-inference-instance-view>`
- * with a RunInstance snapshot parsed from a prediction's NDJSON event log.
+ * with a RunInstance snapshot read from an instance's ATIF trajectory.
  * Controlled component: parent owns load/parse and passes the instance in. */
 import { Component, EventEmitter, HostListener, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -35,8 +35,8 @@ export class LogViewerModalComponent {
   @Input() error = '';
   @Input() title = '';
   @Input() instance: RunInstance | null = null;
-  /** Filename of the user-facing text log that mirrors this NDJSON
-   * event log (e.g. `prediction-<runId>.log`). Rendered as a pill next
+  /** Filename of the user-facing text log written beside this run's
+   * ATIF trajectories (e.g. `prediction-<runId>.log`). Rendered as a pill next
    * to the modal title so users can locate it on disk. */
   @Input() logFileName = '';
   /** Resolved predictions-logs directory (e.g. `results/predictions/logs`

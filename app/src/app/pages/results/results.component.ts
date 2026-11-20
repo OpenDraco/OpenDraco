@@ -21,9 +21,9 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import { DracoBoxComponent, DracoButtonComponent, DracoSelectComponent } from '../../components/index';
 import { ICON } from '../../icons';
 import {
-  RunInstance, buildNodeColors, parseNdjsonToRunInstance,
-  parseAgentTimingsFromLog, applyAgentTimingsToInstance,
+  RunInstance, buildNodeColors, applyAgentTimingsToInstance,
 } from '../../services/inference-run.service';
+import { agentTimingsFromAtif, parseAtifToRunInstance } from '../../services/atif-run';
 
 import {
   InstanceTreePickerComponent, PredictionPanelComponent,
@@ -478,7 +478,7 @@ export class ResultsComponent implements OnInit {
   downloadPredictionLogFile(): void {
     if (!this.prediction || !this.predictionLog) return;
     const stem = this.prediction.name.replace(/\.jsonl$/i, '');
-    this.downloadText(this.predictionLog, `${stem}.log`, 'application/x-ndjson');
+    this.downloadText(this.predictionLog, `${stem}.log`, 'text/plain');
   }
 
   downloadPredictionConfig(): void {
@@ -592,21 +592,16 @@ export class ResultsComponent implements OnInit {
       : this.api.getAgentTypes().toPromise().then(v => v ?? []);
 
     forkJoin({
-      ndjson: this.api.getResultPredictionNdjson(file.path),
-      cfg:    this.api.getResultPredictionConfig(file.path),
-      // The .log file is the source of truth for per-agent execution
-      // time. NDJSON events don't carry per-event timestamps, so the
-      // replay path overlays log-derived `durationMs` onto the cards
-      // after the NDJSON reduce. Missing log → cards render without
-      // timings (the renderer just omits the badge).
-      log:    this.api.getResultPredictionLog(file.path),
-      types:  agentTypes$,
+      // The stored run log: this instance's ATIF trajectory.
+      traj:  this.api.getResultTrajectory(file.path, this.logViewTitle || undefined),
+      cfg:   this.api.getResultPredictionConfig(file.path),
+      types: agentTypes$,
     }).subscribe({
-      next: ({ ndjson, cfg, log, types }) => {
+      next: ({ traj, cfg, types }) => {
         this.logViewLoading = false;
         if (types && !this.agentTypesCache) this.agentTypesCache = types;
-        if (!ndjson.exists) {
-          this.logViewError = 'NDJSON event log not found for this run — re-run inference to capture one.';
+        if (!traj.exists || !traj.trajectory) {
+          this.logViewError = 'No ATIF trajectory found for this instance — re-run inference to record one.';
           this.cdr.markForCheck();
           return;
         }
@@ -617,19 +612,9 @@ export class ResultsComponent implements OnInit {
             nodeColors = buildNodeColors(parsed, types);
           } catch { /* leave nodeColors empty */ }
         }
-        this.logViewInstance = parseNdjsonToRunInstance(
-          ndjson.raw, this.logViewTitle, nodeColors,
-        );
-        // Overlay log-derived per-agent durations. The NDJSON reduce
-        // path also writes `durationMs` (using parse-time wall clock,
-        // not the original run's clock), so this overwrite is what
-        // makes the replay timing meaningful.
-        if (log.exists && log.raw) {
-          applyAgentTimingsToInstance(
-            this.logViewInstance,
-            parseAgentTimingsFromLog(log.raw),
-          );
-        }
+        this.logViewInstance = parseAtifToRunInstance(traj.trajectory, nodeColors);
+        // Per-agent durations from the trajectory's step timestamps.
+        applyAgentTimingsToInstance(this.logViewInstance, agentTimingsFromAtif(traj.trajectory));
         this.cdr.markForCheck();
       },
       error: err => {
@@ -684,7 +669,7 @@ export class ResultsComponent implements OnInit {
     const file = this.selectedPredFile;
     if (this.resultsView !== 'graphectory' || this.graphectoryConfigured !== true || !file
         || this.graphectoryState !== 'idle') return;
-    this.graphectorySub = this.api.getSavedGraphectoryLink(file.path).subscribe({
+    this.graphectorySub = this.api.getSavedGraphectoryLink(file.path, this.selectedId ?? '').subscribe({
       next: res => {
         if (this.selectedPredFile?.path !== file.path || this.graphectoryState !== 'idle') return;
         if (res.graph) {
@@ -717,8 +702,16 @@ export class ResultsComponent implements OnInit {
     // Synchronous on the API's side: it answers once the Viewer lists the run.
     this.graphectorySub = this.api.uploadToGraphectory(file.path).subscribe({
       next: res => {
-        this.graphectoryLink = res.graph;
-        this.graphectoryState = 'ready';
+        // One graph per instance: show the selected one.
+        const id = this.selectedId ?? '';
+        const link = res.links?.[id];
+        if (link) {
+          this.graphectoryLink = link;
+          this.graphectoryState = 'ready';
+        } else {
+          this.graphectoryError = `The run was published, but it has no Graphectory graph for ${id || 'this instance'}.`;
+          this.graphectoryState = 'error';
+        }
         this.cdr.markForCheck();
       },
       error: err => {

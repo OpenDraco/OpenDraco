@@ -60,7 +60,8 @@ PREDICTIONS_DIR: Path = RESULTS_DIR / "predictions"
 PREDICTION_TEXT_LOGS_DIR: Path = PREDICTIONS_DIR / "logs"
 # Snapshot of the config used for each run; survives source-config edits.
 PREDICTION_CONFIGS_DIR: Path = PREDICTIONS_DIR / "configs"
-# Internal NDJSON SSE-event log per run; powers Inference-page reload-resume.
+# ATIF run logs: <stem>/<instance_id>/trajectory.json (opendraco.utils.atif);
+# they power reattach, the Results log viewer, History and Graphectory.
 INFERENCE_INTERNAL_LOGS_DIR: Path = BASE_DIR / "opendraco" / "logs" / "inference_logs"
 EVALUATION_DIR: Path = RESULTS_DIR / "evaluations"
 

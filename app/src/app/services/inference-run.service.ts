@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
-import { Subject, Subscription, timer } from 'rxjs';
+import { Subject, Subscription, catchError, forkJoin, of, timer } from 'rxjs';
 import { ApiService } from './api.service';
 import { AgentType, InferenceEvent, AGENT_COLORS, AGENT_LABELS, HandoffChip, UnifiedConfig } from '../models/types';
+import { parseAtifToRunInstance } from './atif-run';
 
 /** Per-node colour map from agent config + `/api/agent-types`. Shared
  * by the live Inference page and the Results-page modal so the card
@@ -31,7 +32,7 @@ export function buildNodeColors(
   return out;
 }
 
-const LOG_POLL_INTERVAL_MS = 1500;
+const TRAJECTORY_POLL_INTERVAL_MS = 1500;
 
 export interface ToolCallEntry {
   tool: string;
@@ -101,7 +102,7 @@ function newCard(agent: string, nodeColors: Record<string, string>): AgentCard {
   };
 }
 
-/** Fresh RunInstance — shared by the live service and the NDJSON replay. */
+/** Fresh RunInstance — shared by the live service and the ATIF reader. */
 export function newRunInstance(
   instanceId: string,
   status: RunInstance['status'] = 'queued',
@@ -149,7 +150,8 @@ function _spawnCard(
   return card;
 }
 
-/** Pure reducer: SSE/NDJSON event → RunInstance mutation. Per-instance
+/** Pure reducer: live (SSE) event → RunInstance mutation; stored ATIF runs
+ * are replayed through it too (`atif-run.ts`). Per-instance
  * mutations only; run-level status stays in `InferenceRunService`. */
 export function applyEventToInstance(
   inst: RunInstance,
@@ -260,128 +262,14 @@ export function applyEventToInstance(
 
     // status / start / done / cancelled / run_id are service-level only
     // (no per-instance mutation). run_id targets multiple instances at
-    // the service layer; the static parser doesn't need it because the
-    // NDJSON's `instance_done` carries the final runId.
+    // the service layer; the ATIF reader doesn't need it because its
+    // `instance_done` carries the final runId.
   }
-}
-
-/** Replay a completed run's NDJSON event log into a snapshot RunInstance.
- *
- * Multi-instance batches: if `instanceId` is non-empty, only events that
- * are scoped to that instance (`ev.instance_id === instanceId`) OR that
- * are instance-unscoped (`thinking_chunk` / `tool_call` etc., which the
- * worker emits between `instance_start`/`instance_done` for the active
- * one) are applied.
- *
- * Falls back to `status='done'` if the file never emitted an
- * `instance_start` — older runs predating that event still produce a
- * usable card view. */
-export function parseNdjsonToRunInstance(
-  raw: string,
-  instanceId: string,
-  nodeColors: Record<string, string> = {},
-): RunInstance {
-  const inst = newRunInstance(instanceId);
-  let activeInstanceId = '';
-  let sawInstanceStart = false;
-
-  for (const line of raw.split('\n')) {
-    const t = line.trim();
-    if (!t) continue;
-    let ev: InferenceEvent;
-    try { ev = JSON.parse(t) as InferenceEvent; } catch { continue; }
-
-    // `instance_start`/`instance_done` scope unscoped events between them.
-    if (ev.type === 'instance_start' && ev.instance_id) {
-      activeInstanceId = ev.instance_id;
-      sawInstanceStart = true;
-    }
-
-    if (instanceId) {
-      if (ev.instance_id && ev.instance_id !== instanceId) {
-        if (ev.type === 'instance_done' && ev.instance_id === activeInstanceId) {
-          activeInstanceId = '';
-        }
-        continue;
-      }
-      // Unscoped event: apply only if the active scope is our target.
-      if (!ev.instance_id && activeInstanceId && activeInstanceId !== instanceId) {
-        continue;
-      }
-    }
-
-    applyEventToInstance(inst, ev, nodeColors);
-
-    if (ev.type === 'instance_done' && ev.instance_id) {
-      activeInstanceId = '';
-    }
-  }
-
-  // Completed runs without an instance_start still belong on 'done'.
-  if (!sawInstanceStart && inst.status === 'queued') {
-    inst.status = 'done';
-  }
-  // Strip the live-path `durationMs` that the reducer wrote using
-  // parse-time wall clock — those numbers reflect the millis between
-  // spawn and event-reduce, NOT the original run. Callers overlay
-  // log-derived timings via `applyAgentTimingsToInstance` instead.
-  for (const card of inst.cards) {
-    card.durationMs = undefined;
-    card.startedAt = undefined;
-  }
-  return inst;
-}
-
-/** Extract per-agent execution time (ms) from a prediction's `.log` text.
- *
- * The runner writes lines shaped like
- *   `YYYY-MM-DD HH:MM:SS,mmm - INFO - [agent] ...`
- * and sub-tag variants like `[agent|think]` or `[agent|tool]`. The
- * agent's TOTAL time is taken as (last timestamp − first timestamp) of
- * every line whose `[agent...]` prefix matches that agent — sub-tags
- * are folded into the parent agent so `[locator|think]` counts toward
- * `locator`.
- *
- * Returns `agent → durationMs`. Agents that only emit one line get 0.
- */
-export function parseAgentTimingsFromLog(raw: string): Map<string, number> {
-  // ISO-ish line head: `2026-05-14 22:24:01,881 - INFO - [agent...]`.
-  // Capture group 1 = timestamp; group 2 = agent identifier (before any
-  // `|` sub-tag or `]`).
-  const RE = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - \w+ - \[([^\]|]+)/;
-  const first = new Map<string, number>();
-  const last  = new Map<string, number>();
-  for (const line of raw.split('\n')) {
-    const m = line.match(RE);
-    if (!m) continue;
-    const t = parseLogTimestamp(m[1]);
-    if (t == null) continue;
-    const agent = m[2].trim();
-    if (!agent) continue;
-    if (!first.has(agent) || t < (first.get(agent) ?? Infinity)) first.set(agent, t);
-    if (!last.has(agent)  || t > (last.get(agent)  ?? -Infinity)) last.set(agent, t);
-  }
-  const out = new Map<string, number>();
-  for (const [a, start] of first) {
-    out.set(a, Math.max(0, (last.get(a) ?? start) - start));
-  }
-  return out;
-}
-
-/** `2026-05-14 22:24:01,881` → epoch ms. Parses as **local time** since
- * the runner uses the host clock. Returns `null` on malformed input. */
-function parseLogTimestamp(s: string): number | null {
-  // `Date.parse` accepts `YYYY-MM-DDTHH:MM:SS.mmm` reliably across
-  // browsers; the runner writes `YYYY-MM-DD HH:MM:SS,mmm`.
-  const iso = s.replace(' ', 'T').replace(',', '.');
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? t : null;
 }
 
 /** Overwrite each `AgentCard.durationMs` with the matching entry from
- * `timings`. Cards for the same agent across retries get the same
- * aggregate value — the `.log` file doesn't split iteration boundaries
- * reliably, so showing the total on every card is the accurate read. */
+ * `timings` (per agent, from `agentTimingsFromAtif`). Cards for the same
+ * agent across retries get the same aggregate value. */
 export function applyAgentTimingsToInstance(
   inst: RunInstance,
   timings: Map<string, number>,
@@ -434,11 +322,11 @@ export class InferenceRunService {
   readonly changed = new Subject<void>();
   private sub?: Subscription;
 
-  // Resume-from-log state for mid-run page reloads.
-  private logPath: string | null = null;
-  private logOffset = 0;
+  // Reattach state for mid-run page reloads: the run's ATIF folder and
+  // the last mtime seen per instance (unchanged files are not re-parsed).
+  private runDir: string | null = null;
+  private lastMtime: Record<string, number> = {};
   private pollSub?: Subscription;
-  private logBuffer = '';
 
   constructor(private api: ApiService) {
     this.attach();
@@ -479,13 +367,13 @@ export class InferenceRunService {
 
   // ─── Live-stream lifecycle (attach on inference page enter, ──
   //                              detach on leave) ──────────────────
-  /** Sync to the backend's `_active_run` and start log-polling. No-op
+  /** Sync to the backend's `_active_run` and start trajectory polling. No-op
    * when an SSE stream for the same run is already attached. */
   attach(): void {
     if (this.sub && this.status === 'running') return;
     this.api.getActiveInference().subscribe({
       next: snap => {
-        if (!snap.active || !snap.log_path || !snap.instance_ids) return;
+        if (!snap.active || !snap.run_dir || !snap.instance_ids) return;
         const sameRun =
           !!snap.run_id &&
           this.instances.length > 0 &&
@@ -501,12 +389,11 @@ export class InferenceRunService {
           );
           this.selectedInstanceId = snap.instance_ids[0] ?? null;
           this.statusMsg = `Reattaching to run ${snap.run_id ?? ''}…`;
-          this.logOffset = 0;
-          this.logBuffer = '';
+          this.lastMtime = {};
         }
-        this.logPath = snap.log_path;
+        this.runDir = snap.run_dir;
         this.notify();
-        this.startLogPolling();
+        this.startTrajectoryPolling();
       },
       error: () => { /* server unreachable; nothing to resume */ },
     });
@@ -516,47 +403,75 @@ export class InferenceRunService {
   detach(): void {
     this.sub?.unsubscribe();
     this.sub = undefined;
-    this.stopLogPolling();
+    this.stopTrajectoryPolling();
   }
 
-  private startLogPolling(): void {
-    this.stopLogPolling();
-    if (!this.logPath) return;
-    this.pollSub = timer(0, LOG_POLL_INTERVAL_MS).subscribe(() => this.pollLog());
+  private startTrajectoryPolling(): void {
+    this.stopTrajectoryPolling();
+    if (!this.runDir) return;
+    this.pollSub = timer(0, TRAJECTORY_POLL_INTERVAL_MS).subscribe(() => this.pollTrajectories());
   }
 
-  private stopLogPolling(): void {
+  private stopTrajectoryPolling(): void {
     this.pollSub?.unsubscribe();
     this.pollSub = undefined;
   }
 
-  private pollLog(): void {
-    if (!this.logPath) { this.stopLogPolling(); return; }
-    this.api.getInferenceLogTail(this.logPath, this.logOffset).subscribe({
-      next: chunk => {
-        this.logOffset = chunk.offset;
-        // Buffer + newline split so partial-line tails don't break JSON.parse.
-        this.logBuffer += chunk.raw;
-        const lines = this.logBuffer.split('\n');
-        this.logBuffer = lines.pop() ?? '';
-        for (const line of lines) {
-          const t = line.trim();
-          if (!t) continue;
-          try { this.handleEvent(JSON.parse(t) as InferenceEvent); } catch { /* skip malformed */ }
-        }
-        if (!chunk.is_running) {
-          if (this.logBuffer.trim()) {
-            try { this.handleEvent(JSON.parse(this.logBuffer.trim()) as InferenceEvent); } catch {}
-            this.logBuffer = '';
-          }
-          if (this.status === 'running') this.status = 'done';
-          this.logPath = null;
-          this.stopLogPolling();
-        }
-        this.notify();
-      },
-      error: () => { /* transient — keep polling */ },
+  /** Re-read every instance's ATIF trajectory; rebuild only those whose
+   * file changed. Stops once the backend says the run is over. */
+  private pollTrajectories(): void {
+    const runDir = this.runDir;
+    if (!runDir) { this.stopTrajectoryPolling(); return; }
+    const ids = this.instances.map(i => i.instance_id);
+    if (ids.length === 0) return;
+    forkJoin(ids.map(id =>
+      this.api.getInferenceTrajectory(runDir, id, this.lastMtime[id]).pipe(catchError(() => of(null))),
+    )).subscribe(answers => {
+      if (this.runDir !== runDir) return;
+      let answered = false;
+      let running = false;
+      answers.forEach((a, k) => {
+        if (!a) return;
+        answered = true;
+        running = running || a.is_running;
+        if (a.unchanged || !a.trajectory) return;
+        this.lastMtime[ids[k]] = a.mtime;
+        const inst = parseAtifToRunInstance(a.trajectory, this.nodeColors);
+        const previous = this.instances[k];
+        inst.runId = previous?.runId || inst.runId;
+        // Keep what the user collapsed: the same card index is the same
+        // activation (the trajectory only grows).
+        inst.cards.forEach((card, c) => {
+          const old = previous?.cards[c];
+          if (old && old.agent === card.agent) card.expanded = old.expanded;
+        });
+        this.instances[k] = inst;
+      });
+      if (answered && !running) {
+        if (this.status === 'running') this.finishReattachedRun();
+        this.runDir = null;
+        this.stopTrajectoryPolling();
+      }
+      this.notify();
     });
+  }
+
+  /** The run-level outcome of a reattached run, from its instances (the
+   * live stream's `done` / `error` / `cancelled` events are gone). */
+  private finishReattachedRun(): void {
+    const failed = this.instances.find(i => i.status === 'error');
+    if (failed) {
+      this.status = 'error';
+      this.errorMsg = failed.errorMsg || 'Unknown error';
+      return;
+    }
+    if (this.instances.some(i => i.status === 'cancelled')) {
+      this.status = 'cancelled';
+      this.statusMsg = 'Cancelled by user';
+      return;
+    }
+    this.status = 'done';
+    this.statusMsg = `Run complete (${this.instances.length} instance${this.instances.length > 1 ? 's' : ''})`;
   }
 
   // ─── Run / cancel ─────────────────────────────────────────────

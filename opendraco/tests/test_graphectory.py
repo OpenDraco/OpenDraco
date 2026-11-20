@@ -1,18 +1,18 @@
 """Local Graphectory: publish a run into the Viewer.
 
-`publish_run` converts a run's inference log with the built-in converter
-(`opendraco.utils.graphectory_converter`), writes it into
-`<RESULTS_DIR>/graphectory` and reloads the Viewer until it lists the run; a
-finished run is published in the background. The `graphectory-viewer`
-container is only ever inspected, never changed. These tests use a scripted
-stand-in Viewer on a loopback port (stdlib `http.server`), a stand-in
-converter (plus the real one on a small log) and a stubbed `docker`, so no
-network or Docker is needed.
+`publish_run` copies a run's ATIF trajectories into
+`<RESULTS_DIR>/graphectory` and reloads the Viewer until it lists every
+instance; a finished run is published in the background. The
+`graphectory-viewer` container is only ever inspected, never changed. These
+tests use a scripted stand-in ATIF Viewer on a loopback port (stdlib
+`http.server`) and a stubbed `docker`, so no network or Docker is needed.
 """
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
+import stat
 import logging
 import socket
 import subprocess
@@ -29,14 +29,13 @@ import pytest
 from api.routers import inference
 from opendraco.exceptions.errors import OpendracoError
 from opendraco.utils import graphectory
+from opendraco.utils.atif import RunRecorder
 
-LOG_TEXT = (
-    json.dumps({"type": "run_meta", "run_id": "chain-4f7d9f56", "config_name": "chain"}) + "\n"
-    + json.dumps({"type": "agent_event", "agent": "locator", "delta": {"note": "héllo"}}) + "\n"
-)
 LOGGER_NAME = graphectory.logger.name
 # Captured before any test patches it.
 REAL_DATA_DIR = graphectory.DATA_DIR
+RUN_ID = "chain-4f7d9f56"
+IIDS = ("django__django-10973", "astropy__astropy-12907")
 
 
 @pytest.fixture(autouse=True)
@@ -47,11 +46,30 @@ def _isolated_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return data_dir
 
 
+@pytest.fixture
+def run_dir(tmp_path: Path) -> Path:
+    """A finished two-instance run, recorded as ATIF."""
+    folder = tmp_path / "inference_logs" / f"prediction-{RUN_ID}"
+    run = RunRecorder(
+        folder, run_info={"run_id": RUN_ID, "config_name": "chain", "instance_ids": list(IIDS)},
+        agent_extra={}, instances=[(iid, "issue") for iid in IIDS],
+    )
+    for iid in IIDS:
+        run.instance(iid).start()
+        run.instance(iid).finish("done", model_patch="")
+    return folder
+
+
+def _graph_id(iid: str) -> str:
+    return f"{RUN_ID}.{iid}"
+
+
 # ─── Stand-ins ───────────────────────────────────────────────────────────────
 @dataclass
 class FakeViewer:
-    """Loopback stand-in for the Graphectory Viewer: `POST /api/config`
-    (re)loads `data_dir`, `GET /api/graphs` lists its runs, `GET /` is up."""
+    """Loopback stand-in for the ATIF Graphectory Viewer (the fork's
+    feat/atif-mas branch): `POST /api/config` (re)loads `data_dir`,
+    `GET /api/graphs` lists every ATIF file by its `trajectory_id`."""
     url: str
     data_dir: Path
     requests: list[tuple[str, str, Any]] = field(default_factory=list)
@@ -78,8 +96,10 @@ def fake_viewer(tmp_path: Path) -> Iterator[FakeViewer]:
             if self.path == "/":
                 self._send(200, b"<html>viewer</html>", "text/html")
             elif self.path == "/api/graphs":
-                ids = sorted(p.parent.name for p in state.data_dir.glob("*/state.json")) \
-                    if state.loaded and state.list_runs else []
+                ids = sorted(
+                    json.loads(p.read_text(encoding="utf-8"))["trajectory_id"]
+                    for p in state.data_dir.rglob("trajectory.json")
+                ) if state.loaded and state.list_runs else []
                 self._send(200, {"status": "complete", "graphs": [{"instance_id": i} for i in ids]})
             else:
                 self._send(404, {"error": "not found"})
@@ -89,7 +109,7 @@ def fake_viewer(tmp_path: Path) -> Iterator[FakeViewer]:
             state.requests.append(("POST", self.path, body))
             if self.path == "/api/config" and state.config_ok:
                 state.loaded = True
-                self._send(200, {"ok": True, "trajs": body["trajs"], "agent_type": "claude"})
+                self._send(200, {"ok": True, "trajs": body["trajs"], "agent_type": "atif"})
             else:
                 self._send(400, {"error": "bad data source"})
 
@@ -105,29 +125,6 @@ def fake_viewer(tmp_path: Path) -> Iterator[FakeViewer]:
     finally:
         server.shutdown()
         server.server_close()
-
-
-class FakeConvertError(ValueError):
-    pass
-
-
-@pytest.fixture
-def fake_converter(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, bytes, Any]]:
-    """The built-in converter's `run_to_session` replaced by a stand-in that
-    records its calls and refuses a log containing `BAD`."""
-    calls: list[tuple[str, str, bytes, Any]] = []
-
-    def run_to_session(framework: str, run_id: str, body: bytes, title: Any = None):
-        calls.append((framework, run_id, body, title))
-        if b"BAD" in body:
-            raise FakeConvertError("The OpenDraco event log records no agent activity.")
-        return ({"title": title, "custom": {"sourceFramework": "Claude Code"}},
-                [{"type": "context.append_loop_event", "event": {"n": 1}},
-                 {"type": "context.append_loop_event", "event": {"note": "héllo"}}])
-
-    monkeypatch.setattr(graphectory, "run_to_session", run_to_session)
-    monkeypatch.setattr(graphectory, "ConvertError", FakeConvertError)
-    return calls
 
 
 def _closed_port() -> int:
@@ -170,139 +167,118 @@ def test_the_data_folder_is_under_results_dir() -> None:
     assert REAL_DATA_DIR == RESULTS_DIR / "graphectory"
 
 
-# ─── The built-in converter ──────────────────────────────────────────────────
-# A minimal OpenDraco inference event log: one instance, two agents.
-REAL_LOG = "\n".join(json.dumps(e) for e in [
-    {"type": "run_meta", "run_id": "chain-0000abcd", "config_name": "chain",
-     "config_sha": None, "instance_ids": ["demo__demo-1"], "ts": "2026-11-06T10:00:00"},
-    {"type": "instance_start", "instance_id": "demo__demo-1", "index": 0, "total": 1},
-    {"type": "start", "instance_id": "demo__demo-1", "config": "chain"},
-    {"type": "agent_input", "agent": "locator", "inputs": {"problem_statement": "fix it"}},
-    {"type": "tool_call", "agent": "locator", "tool": "search_code",
-     "args_preview": "query=foo", "result_preview": "2 items"},
-    {"type": "response", "agent": "locator", "content": "Found it in foo.py"},
-    {"type": "agent_event", "agent": "locator", "delta": {"location": "foo.py"}},
-    {"type": "handoff", "from": "locator", "to": "patcher", "keys": ["location"],
-     "summary": "location", "preview": "foo.py", "timestamp": "2026-11-06T10:00:05"},
-    {"type": "response", "agent": "patcher", "content": "Patched foo.py"},
-    {"type": "agent_event", "agent": "patcher", "delta": {"patch": "diff"}},
-    {"type": "instance_done", "instance_id": "demo__demo-1", "index": 0, "total": 1,
-     "output_path": "x.jsonl", "run_id": "chain-0000abcd", "patch": ""},
-    {"type": "done", "instance_ids": ["demo__demo-1"], "output_path": "x.jsonl",
-     "run_id": "chain-0000abcd"},
-]) + "\n"
+def test_the_converter_is_gone() -> None:
+    """Graphectory reads ATIF itself: OpenDraco ships no converter."""
+    assert importlib.util.find_spec("opendraco.utils.graphectory_converter") is None
+    assert not hasattr(graphectory, "convert_run")
 
 
-def test_the_built_in_converter_turns_a_log_into_a_claude_code_session() -> None:
-    """No install needed: the converter ships with OpenDraco."""
-    state, records = graphectory.convert_run("chain-0000abcd", REAL_LOG.encode("utf-8"), "t")
-    assert state["custom"]["sourceFramework"] == "Claude Code"
-    assert records and all(r["type"] == "context.append_loop_event" for r in records)
-    text = json.dumps(records)
-    assert "locator" in text and "patcher" in text
+def test_the_viewer_is_built_from_the_atif_fork() -> None:
+    assert "https://github.com/xiangfengyepan/Graphectory.git" in graphectory.BUILD_COMMAND
+    assert "-b feat/atif-mas" in graphectory.BUILD_COMMAND
 
 
-def test_the_built_in_converter_refuses_a_log_without_agents() -> None:
-    with pytest.raises(graphectory.GraphectoryError) as exc:
-        graphectory.convert_run("r1", b'{"type": "status", "message": "hi"}\n')
-    assert exc.value.status == 400
-    assert str(exc.value).startswith("Graphectory could not convert the run:")
+def test_graph_links_quote_the_id() -> None:
+    assert graphectory.graph_link("http://v", "r.a/b") == "http://v/api/graph?id=r.a%2Fb"
 
 
 # ─── publish_run ─────────────────────────────────────────────────────────────
-def test_publish_writes_the_session_reloads_the_viewer_and_returns_the_link(
-    fake_viewer: FakeViewer, fake_converter: list,
-) -> None:
-    link = graphectory.publish_run(
-        fake_viewer.url, "chain-4f7d9f56", "chain chain-4f7d9f56", LOG_TEXT, fake_viewer.data_dir,
-    )
-    assert link == f"{fake_viewer.url}/api/graph?id=chain-4f7d9f56"
-    [(framework, run_id, body, title)] = fake_converter
-    assert (framework, run_id, title) == ("opendraco", "chain-4f7d9f56", "chain chain-4f7d9f56")
-    assert body == LOG_TEXT.encode("utf-8")
-
-    session = fake_viewer.data_dir / "chain-4f7d9f56"
-    assert json.loads((session / "state.json").read_text(encoding="utf-8"))["custom"] == {
-        "sourceFramework": "Claude Code"}
-    wire = (session / "agents" / "main" / "wire.jsonl").read_text(encoding="utf-8").splitlines()
-    assert [json.loads(l)["event"] for l in wire] == [{"n": 1}, {"note": "héllo"}]
-
+def test_publish_copies_atif_and_returns_links(fake_viewer: FakeViewer, run_dir: Path) -> None:
+    links = graphectory.publish_run(fake_viewer.url, run_dir, fake_viewer.data_dir)
+    assert links == {iid: f"{fake_viewer.url}/api/graph?id={_graph_id(iid)}" for iid in IIDS}
+    for iid in IIDS:
+        copied = fake_viewer.data_dir / RUN_ID / iid / "trajectory.json"
+        assert copied.read_bytes() == (run_dir / iid / "trajectory.json").read_bytes()
+        assert stat.S_IMODE(copied.stat().st_mode) == 0o644
+        assert stat.S_IMODE(copied.parent.stat().st_mode) == 0o755
+    assert json.loads((run_dir / "graphectory-links.json").read_text(encoding="utf-8")) == {"links": links}
     assert ("POST", "/api/config", {"trajs": "/data", "eval_report": ""}) in fake_viewer.requests
     assert fake_viewer.requests[-1][:2] == ("GET", "/api/graphs")
 
 
-def test_publish_sanitises_the_run_id(fake_viewer: FakeViewer, fake_converter: list) -> None:
-    link = graphectory.publish_run(fake_viewer.url, "my run/1", "t", LOG_TEXT, fake_viewer.data_dir)
-    assert link.endswith("/api/graph?id=my-run-1")
-    assert (fake_viewer.data_dir / "my-run-1" / "state.json").is_file()
+def test_publish_clears_legacy_sessions(fake_viewer: FakeViewer, run_dir: Path) -> None:
+    """Converter-made Claude Code sessions would hide every ATIF run in the
+    Viewer (it picks one format per folder)."""
+    old = fake_viewer.data_dir / "old-run"
+    (old / "agents" / "main").mkdir(parents=True)
+    (old / "state.json").write_text("{}", encoding="utf-8")
+    (old / "agents" / "main" / "wire.jsonl").write_text("", encoding="utf-8")
+    notes = fake_viewer.data_dir / "notes"
+    notes.mkdir()
+    graphectory.publish_run(fake_viewer.url, run_dir, fake_viewer.data_dir)
+    assert not old.exists()
+    assert notes.is_dir()
 
 
-def test_an_unconvertible_log_is_a_400_and_writes_nothing(
-    fake_viewer: FakeViewer, fake_converter: list,
-) -> None:
+def test_clear_legacy_sessions_counts(tmp_path: Path) -> None:
+    for name in ("a", "b"):
+        (tmp_path / name / "agents").mkdir(parents=True)
+        (tmp_path / name / "state.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "c").mkdir()
+    assert graphectory.clear_legacy_sessions(tmp_path) == 2
+    assert graphectory.clear_legacy_sessions(tmp_path / "missing") == 0
+
+
+def test_a_run_without_trajectories_is_a_404(fake_viewer: FakeViewer, tmp_path: Path) -> None:
+    empty = tmp_path / "empty-run"
+    empty.mkdir()
     with pytest.raises(graphectory.GraphectoryError) as exc:
-        graphectory.publish_run(fake_viewer.url, "r1", "t", "BAD", fake_viewer.data_dir)
-    assert exc.value.status == 400
-    assert "no agent activity" in str(exc.value)
-    assert not fake_viewer.data_dir.exists()
+        graphectory.publish_run(fake_viewer.url, empty, fake_viewer.data_dir)
+    assert exc.value.status == 404
     assert fake_viewer.requests == []
 
 
-def test_an_unreachable_viewer_is_a_504_naming_the_container(
-    tmp_path: Path, fake_converter: list,
-) -> None:
+def test_an_unreachable_viewer_is_a_504_naming_the_container(tmp_path: Path, run_dir: Path) -> None:
     with pytest.raises(graphectory.GraphectoryError) as exc:
-        graphectory.publish_run(f"http://127.0.0.1:{_closed_port()}", "r1", "t", LOG_TEXT, tmp_path)
+        graphectory.publish_run(f"http://127.0.0.1:{_closed_port()}", run_dir, tmp_path / "d")
     assert exc.value.status == 504
     assert "graphectory-viewer" in str(exc.value) and "opendraco status" in str(exc.value)
 
 
-def test_a_viewer_that_refuses_its_data_folder_is_a_502(
-    fake_viewer: FakeViewer, fake_converter: list,
-) -> None:
+def test_a_viewer_that_refuses_its_data_folder_is_a_502(fake_viewer: FakeViewer, run_dir: Path) -> None:
     fake_viewer.config_ok = False
     with pytest.raises(graphectory.GraphectoryError) as exc:
-        graphectory.publish_run(fake_viewer.url, "r1", "t", LOG_TEXT, fake_viewer.data_dir)
+        graphectory.publish_run(fake_viewer.url, run_dir, fake_viewer.data_dir)
     assert exc.value.status == 502
     assert "bad data source" in str(exc.value)
 
 
-def test_a_viewer_that_never_lists_the_run_is_a_502(
-    fake_viewer: FakeViewer, fake_converter: list,
+def test_a_viewer_that_never_lists_the_run_names_the_atif_fork(
+    fake_viewer: FakeViewer, run_dir: Path,
 ) -> None:
-    """E.g. a container whose /data is another folder."""
+    """E.g. a stock Graphectory, which can't read ATIF, or another /data."""
     fake_viewer.list_runs = False
     with pytest.raises(graphectory.GraphectoryError) as exc:
-        graphectory.publish_run(fake_viewer.url, "r1", "t", LOG_TEXT, fake_viewer.data_dir)
+        graphectory.publish_run(fake_viewer.url, run_dir, fake_viewer.data_dir)
     assert exc.value.status == 502
-    assert "does not list run 'r1'" in str(exc.value)
+    assert _graph_id(IIDS[0]) in str(exc.value)
+    assert "feat/atif-mas" in str(exc.value) and "ATIF" in str(exc.value)
 
 
 @pytest.mark.parametrize("url", ["", "ftp://x", "http://"])
-def test_a_bad_viewer_url_is_a_503(tmp_path: Path, fake_converter: list, url: str) -> None:
+def test_a_bad_viewer_url_is_a_503(tmp_path: Path, run_dir: Path, url: str) -> None:
     with pytest.raises(graphectory.GraphectoryError) as exc:
-        graphectory.publish_run(url, "r1", "t", LOG_TEXT, tmp_path)
+        graphectory.publish_run(url, run_dir, tmp_path / "d")
     assert exc.value.status == 503
 
 
-def test_publish_run_log_never_raises_and_warns(
-    tmp_path: Path, fake_converter: list, caplog: pytest.LogCaptureFixture,
+def test_publish_run_dir_never_raises_and_warns(
+    run_dir: Path, caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.INFO, logger=LOGGER_NAME)
-    assert graphectory.publish_run_log(f"http://127.0.0.1:{_closed_port()}", "r1", "t", LOG_TEXT) is None
-    assert not (REAL_DATA_DIR / "r1").exists()
-    assert any(r.levelno == logging.WARNING and "r1" in r.getMessage() for r in caplog.records)
+    assert graphectory.publish_run_dir(f"http://127.0.0.1:{_closed_port()}", run_dir) is None
+    assert any(r.levelno == logging.WARNING and RUN_ID in r.getMessage() for r in caplog.records)
 
 
-def test_publish_run_log_logs_the_link_at_info(
-    fake_viewer: FakeViewer, fake_converter: list, monkeypatch: pytest.MonkeyPatch,
+def test_publish_run_dir_logs_the_links_at_info(
+    fake_viewer: FakeViewer, run_dir: Path, monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setattr(graphectory, "DATA_DIR", fake_viewer.data_dir)
     caplog.set_level(logging.INFO, logger=LOGGER_NAME)
-    graph = graphectory.publish_run_log(fake_viewer.url, "r1", "t", LOG_TEXT)
-    assert graph == f"{fake_viewer.url}/api/graph?id=r1"
-    assert any(r.levelno == logging.INFO and graph in r.getMessage() for r in caplog.records)
+    links = graphectory.publish_run_dir(fake_viewer.url, run_dir)
+    assert links and set(links) == set(IIDS)
+    assert any(r.levelno == logging.INFO and links[IIDS[0]] in r.getMessage() for r in caplog.records)
 
 
 def test_the_viewer_is_reachable_only_when_it_answers(fake_viewer: FakeViewer) -> None:
@@ -320,18 +296,15 @@ def test_the_end_of_run_publish_is_off_without_graphectory_url(
     monkeypatch.setattr(
         inference, "threading", SimpleNamespace(Thread=lambda *a, **k: started.append(k)),
     )
-    inference._start_graphectory_publish("chain", "chain-4f7d9f56", "unused.ndjson")
+    inference._start_graphectory_publish("unused-run-dir")
     assert started == []
 
 
-def test_the_end_of_run_publish_saves_the_link_beside_the_log(
-    tmp_path: Path, fake_viewer: FakeViewer, fake_converter: list,
-    monkeypatch: pytest.MonkeyPatch,
+def test_the_end_of_run_publish_writes_the_links(
+    run_dir: Path, fake_viewer: FakeViewer, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GRAPHECTORY_URL", fake_viewer.url)
     monkeypatch.setattr(graphectory, "DATA_DIR", fake_viewer.data_dir)
-    log = tmp_path / "prediction-chain-4f7d9f56.ndjson"
-    log.write_text(LOG_TEXT, encoding="utf-8")
     threads: list[threading.Thread] = []
     real_thread = threading.Thread
 
@@ -340,20 +313,18 @@ def test_the_end_of_run_publish_saves_the_link_beside_the_log(
         return threads[-1]
 
     monkeypatch.setattr(inference, "threading", SimpleNamespace(Thread=spy))
-    inference._start_graphectory_publish("chain", "chain-4f7d9f56", str(log))
+    inference._start_graphectory_publish(str(run_dir))
     [thread] = threads
     assert thread.daemon is True
     thread.join(10)
-    saved = json.loads((tmp_path / "prediction-chain-4f7d9f56.graphectory-link.json")
-                       .read_text(encoding="utf-8"))
-    assert saved == {"graph": f"{fake_viewer.url}/api/graph?id=chain-4f7d9f56",
-                     "run_id": "chain-4f7d9f56"}
+    saved = json.loads((run_dir / "graphectory-links.json").read_text(encoding="utf-8"))
+    assert set(saved["links"]) == set(IIDS)
 
 
-def test_an_unreadable_log_file_warns_and_does_not_raise(
+def test_an_unusable_run_dir_warns_and_does_not_raise(
     tmp_path: Path, caplog: pytest.LogCaptureFixture,
 ) -> None:
-    inference._publish_log_file("http://127.0.0.1:9", "chain", "r1", str(tmp_path / "missing.ndjson"))
+    inference._publish_run_folder("http://127.0.0.1:9", str(tmp_path / "missing"))
     assert any(r.levelno == logging.WARNING for r in caplog.records)
 
 
@@ -515,10 +486,10 @@ def stubbed_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamesp
         lambda iid, repo, commit: SimpleNamespace(path=tmp_path),
     )
 
-    def hook(config_name: str, run_id: str, log_path: str) -> None:
-        # The log must be complete and closed by now: read it back.
-        lines = Path(log_path).read_text(encoding="utf-8").splitlines()
-        state.calls.append((config_name, run_id, json.loads(lines[-1])["type"]))
+    def hook(run_dir: str) -> None:
+        # The ATIF log must be final by now: read the instance back.
+        doc = json.loads((Path(run_dir) / IID / "trajectory.json").read_text(encoding="utf-8"))
+        state.calls.append((Path(run_dir).name, doc["session_id"], doc["extra"]["status"]))
 
     monkeypatch.setattr(inference, "_start_graphectory_publish", hook)
     return state
@@ -538,10 +509,10 @@ def _run_to_the_end() -> list[dict[str, Any]]:
 def test_the_hook_runs_once_on_success(stubbed_run: SimpleNamespace) -> None:
     events = _run_to_the_end()
     assert events[-1]["type"] == "done"
-    [(config_name, run_id, last_event)] = stubbed_run.calls
-    assert config_name == "chain"
+    [(folder, run_id, status)] = stubbed_run.calls
+    assert folder == f"prediction-{run_id}"
     assert run_id == events[-1]["run_id"] and run_id.startswith("chain-")
-    assert last_event == "done"
+    assert status == "done"
 
 
 def test_the_hook_runs_once_on_error(stubbed_run: SimpleNamespace) -> None:
@@ -551,8 +522,8 @@ def test_the_hook_runs_once_on_error(stubbed_run: SimpleNamespace) -> None:
     stubbed_run.preflight = fail
     events = _run_to_the_end()
     assert events[-1]["type"] == "error"
-    [(_, _, last_event)] = stubbed_run.calls
-    assert last_event == "error"
+    [(_, _, status)] = stubbed_run.calls
+    assert status == "error"
 
 
 def test_the_hook_runs_once_on_cancel(stubbed_run: SimpleNamespace) -> None:
@@ -562,14 +533,14 @@ def test_the_hook_runs_once_on_cancel(stubbed_run: SimpleNamespace) -> None:
     stubbed_run.preflight = cancel
     events = _run_to_the_end()
     assert events[-1]["type"] == "cancelled"
-    [(_, _, last_event)] = stubbed_run.calls
-    assert last_event == "cancelled"
+    [(_, _, status)] = stubbed_run.calls
+    assert status == "cancelled"
 
 
 def test_a_failing_hook_never_breaks_the_run(
     stubbed_run: SimpleNamespace, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def boom(config_name: str, run_id: str, log_path: str) -> None:
+    def boom(run_dir: str) -> None:
         raise RuntimeError("boom")
 
     monkeypatch.setattr(inference, "_start_graphectory_publish", boom)

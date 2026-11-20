@@ -1,0 +1,38 @@
+{"type": "run_meta", "run_id": "chain-0000abcd", "config_name": "chain", "config_sha": "abc1234", "instance_ids": ["demo__demo-1", "demo__demo-2"], "ts": "2026-11-06T10:00:00"}
+{"type": "instance_start", "instance_id": "demo__demo-1", "index": 0, "total": 2}
+{"type": "status", "message": "Cloning workspace"}
+{"type": "start", "instance_id": "demo__demo-1", "config": "chain"}
+{"type": "thinking_chunk", "agent": "locator", "chunk": "let me "}
+{"type": "thinking_chunk", "agent": "locator", "chunk": "search"}
+{"type": "response", "agent": "locator", "content": "Searching"}
+{"type": "tool_call", "agent": "locator", "tool": "search_code", "args_preview": "query=foo", "result_preview": "2 items"}
+{"type": "response", "agent": "locator", "content": "Found it in foo.py"}
+{"type": "agent_input", "agent": "locator", "inputs": {}}
+{"type": "agent_event", "agent": "locator", "delta": {"locator": "foo.py"}}
+{"type": "handoff", "from": "locator", "to": "patcher", "keys": ["locator"], "summary": "str(6 B)", "preview": "foo.py", "timestamp": "2026-11-06T10:00:05"}
+{"type": "response", "agent": "patcher", "content": "Patched foo.py"}
+{"type": "tool_call", "agent": "patcher", "tool": "apply_patch", "args_preview": "repo_path=…/x", "result_preview": "ok=True"}
+{"type": "agent_input", "agent": "patcher", "inputs": {"locator": "foo.py"}}
+{"type": "agent_event", "agent": "patcher", "delta": {"patcher": "diff"}}
+{"type": "agent_tokens", "agent": "locator", "input": 100, "output": 20, "total": 120}
+{"type": "agent_tokens", "agent": "patcher", "input": 50, "output": 10, "total": 60}
+{"type": "instance_done", "instance_id": "demo__demo-1", "index": 0, "total": 2, "output_path": "x.jsonl", "run_id": "chain-0000abcd", "patch": "diff --git a/foo.py b/foo.py"}
+{"type": "instance_start", "instance_id": "demo__demo-2", "index": 1, "total": 2}
+{"type": "status", "message": "Cloning workspace"}
+{"type": "start", "instance_id": "demo__demo-2", "config": "chain"}
+{"type": "thinking_chunk", "agent": "locator", "chunk": "let me "}
+{"type": "thinking_chunk", "agent": "locator", "chunk": "search"}
+{"type": "response", "agent": "locator", "content": "Searching"}
+{"type": "tool_call", "agent": "locator", "tool": "search_code", "args_preview": "query=foo", "result_preview": "2 items"}
+{"type": "response", "agent": "locator", "content": "Found it in foo.py"}
+{"type": "agent_input", "agent": "locator", "inputs": {}}
+{"type": "agent_event", "agent": "locator", "delta": {"locator": "foo.py"}}
+{"type": "handoff", "from": "locator", "to": "patcher", "keys": ["locator"], "summary": "str(6 B)", "preview": "foo.py", "timestamp": "2026-11-06T10:00:05"}
+{"type": "response", "agent": "patcher", "content": "Patched foo.py"}
+{"type": "tool_call", "agent": "patcher", "tool": "apply_patch", "args_preview": "repo_path=…/x", "result_preview": "ok=True"}
+{"type": "agent_input", "agent": "patcher", "inputs": {"locator": "foo.py"}}
+{"type": "agent_event", "agent": "patcher", "delta": {"patcher": "diff"}}
+{"type": "agent_tokens", "agent": "locator", "input": 100, "output": 20, "total": 120}
+{"type": "agent_tokens", "agent": "patcher", "input": 50, "output": 10, "total": 60}
+{"type": "instance_done", "instance_id": "demo__demo-2", "index": 1, "total": 2, "output_path": "x.jsonl", "run_id": "chain-0000abcd", "patch": "diff --git a/foo.py b/foo.py"}
+{"type": "done", "instance_ids": ["demo__demo-1", "demo__demo-2"], "output_path": "x.jsonl", "run_id": "chain-0000abcd"}

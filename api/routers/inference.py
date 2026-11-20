@@ -1,9 +1,10 @@
 """Inference-page endpoints: kick off / cancel / observe an LLM run.
 
-`/api/inference/run` streams agent events over SSE while mirroring the
-stream into an NDJSON sidecar for reload-resume. `/api/inference/active`
-+ `/api/inference/log-tail` let the page resume an in-flight run after
-a refresh without holding open an SSE connection."""
+`/api/inference/run` streams agent events over SSE (live only) and records
+the run as ATIF (`opendraco.utils.atif`): one `trajectory.json` per instance
+under `<INFERENCE_INTERNAL_LOGS_DIR>/<stem>/`. `/api/inference/active` +
+`/api/inference/trajectory` let the page resume an in-flight run after a
+refresh without holding open an SSE connection."""
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +31,8 @@ from api.common import (
     logger,
 )
 from opendraco.config.loader import resolve_config_path
-from opendraco.utils.graphectory import graphectory_base_url, publish_run_log, safe_run_id
+from opendraco.utils.graphectory import graphectory_base_url, publish_run_dir
+from opendraco.utils.atif import RunRecorder, TRAJECTORY_FILE, now_iso
 from opendraco.utils.json_safe import safe_serialize
 from opendraco.utils.notebook import build_notebook_for_inputs
 
@@ -56,40 +58,62 @@ _cancel_flags: dict[str, bool] = {}
 _active_run: dict[str, Any] | None = None
 
 
-def _publish_log_file(viewer_url: str, config_name: str, run_id: str, log_path: str) -> None:
-    """Convert one finished run's whole inference log into the local
-    Graphectory Viewer and save its link beside the log
-    (`<stem>.graphectory-link.json`, what the Results tab shows). Runs on
+def _publish_run_folder(viewer_url: str, run_dir: str) -> None:
+    """Publish one finished run's ATIF trajectories into the local
+    Graphectory Viewer (`publish_run_dir` saves the per-instance links as
+    `<run_dir>/graphectory-links.json`, what the Results tab shows). Runs on
     its own thread; never raises."""
     try:
-        log_file = Path(log_path)
-        log_text = log_file.read_text(encoding="utf-8", errors="replace")
-        graph = publish_run_log(viewer_url, run_id, f"{config_name} {run_id}", log_text)
-        if graph:
-            log_file.with_suffix(".graphectory-link.json").write_text(
-                json.dumps({"graph": graph, "run_id": safe_run_id(run_id)}, indent=2),
-                encoding="utf-8",
-            )
+        publish_run_dir(viewer_url, Path(run_dir))
     except Exception as exc:  # the publish is best-effort
-        logger.warning("Graphectory publish of run %s skipped: %s", run_id, exc)
+        logger.warning("Graphectory publish of %s skipped: %s", run_dir, exc)
 
 
-def _start_graphectory_publish(config_name: str, run_id: str, log_path: str) -> None:
-    """Hand a finished run's log to Graphectory in the background.
+def _start_graphectory_publish(run_dir: str) -> None:
+    """Hand a finished run's ATIF folder to Graphectory in the background.
 
-    Call it once the log file is closed. A no-op unless `GRAPHECTORY_URL`
-    is set; the conversion runs on a daemon thread so a slow or stopped
-    Viewer never delays the run's final events (a failure only logs a
-    warning)."""
+    Call it once the run has finished writing. A no-op unless
+    `GRAPHECTORY_URL` is set; the publish runs on a daemon thread so a slow
+    or stopped Viewer never delays the run's final events (a failure only
+    logs a warning)."""
     viewer_url = graphectory_base_url()
     if not viewer_url:
         return
     threading.Thread(
-        target=_publish_log_file,
-        args=(viewer_url, config_name, run_id, log_path),
+        target=_publish_run_folder,
+        args=(viewer_url, run_dir),
         daemon=True,
         name="graphectory-publish",
     ).start()
+
+
+def _issue_text(instance: dict[str, Any]) -> str:
+    """The issue an instance's agents get: problem statement + hints."""
+    parts: list[str] = []
+    if instance.get("problem_statement"):
+        parts.append(instance["problem_statement"])
+    if instance.get("hints_text"):
+        parts.append("\n## Hints\n" + instance["hints_text"])
+    return "\n".join(parts).strip()
+
+
+def _truncate_preview(val: Any) -> Any:
+    """600-char truncation of a state value (and of string lists)."""
+    if isinstance(val, str):
+        return val[:600] + "\n…(truncated)" if len(val) > 600 else val
+    if isinstance(val, list) and val and all(isinstance(x, str) for x in val):
+        return [(x[:600] + "\n…(truncated)" if len(x) > 600 else x) for x in val]
+    return val
+
+
+def _truncate_delta(delta: dict[str, Any]) -> dict[str, Any]:
+    """A state delta, JSON-safe, with long patch strings in list-valued
+    slots truncated (producer-keyed slots make the field name vary)."""
+    safe = safe_serialize(delta)
+    for k, v in list(safe.items()):
+        if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
+            safe[k] = [(x[:600] + "\n…(truncated)" if len(x) > 600 else x) for x in v]
+    return safe
 
 
 @router.post("/api/inference/run")
@@ -124,23 +148,20 @@ async def run_inference(req: InferenceRequest):
     q: asyncio.Queue = asyncio.Queue()
     loop = asyncio.get_event_loop()
 
-    # Log writers opened once the run_id is known. `put()` mirrors every
-    # SSE event into log_state["fh"] (NDJSON sidecar for resume-on-reload);
+    # The run's ATIF log (`opendraco.utils.atif`), created once the run_id
+    # is known; `outcome` says how unfinished instances end (error/cancel).
     # text_log_state["handler"] is the FileHandler for the user-facing .log.
-    log_state: dict[str, Any] = {"fh": None}
+    rec_state: dict[str, Any] = {"run": None, "run_dir": None}
+    outcome: dict[str, Any] = {"status": "cancelled", "message": "Cancelled by user", "error": None}
     text_log_state: dict[str, Any] = {"handler": None}
-    # Filled once the NDJSON log exists; the `finally` below uploads it.
-    graphectory_state: dict[str, str] = {}
 
     def put(data: dict) -> None:
+        """One live event to the browser (SSE). Nothing is written to disk
+        here: the stored log is the ATIF trajectory."""
         loop.call_soon_threadsafe(q.put_nowait, data)
-        fh = log_state.get("fh")
-        if fh is not None:
-            try:
-                fh.write(json.dumps(data, default=str) + "\n")
-                fh.flush()
-            except (OSError, ValueError):
-                pass
+
+    def fail(message: str, error: dict | None = None) -> None:
+        outcome.update(status="error", message=message, error=error or {"message": message})
 
     def worker() -> None:
         global _active_run
@@ -181,31 +202,43 @@ async def run_inference(req: InferenceRequest):
             INFERENCE_INTERNAL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
             output_path = str(PREDICTIONS_DIR / f"{stem}.jsonl")
             text_log_path = str(PREDICTION_TEXT_LOGS_DIR / f"{stem}.log")
-            internal_log_path = str(INFERENCE_INTERNAL_LOGS_DIR / f"{stem}.ndjson")
+            run_dir = INFERENCE_INTERNAL_LOGS_DIR / stem
             config_snapshot_path = str(PREDICTION_CONFIGS_DIR / f"{stem}.json")
             Path(output_path).write_text("", encoding="utf-8")
             # Snapshot the resolved config so Results can hand it back later.
             Path(config_snapshot_path).write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-            log_state["fh"] = open(internal_log_path, "w", encoding="utf-8", buffering=1)
-            graphectory_state.update(
-                config_name=config_name, run_id=run_id, log_path=internal_log_path,
-            )
 
-            # `run_meta` is the NDJSON header — config name + git SHA so the
+            # `run_meta` (SSE) and the trajectories' `extra.run` carry the
+            # config name + git SHA so the
             # History panel can resolve "runs that used this version".
             try:
                 from opendraco.config.history import current_sha as _current_sha
                 _config_sha = _current_sha(config_name) if not isinstance(req.config, dict) else None
             except Exception:  # noqa: BLE001
                 _config_sha = None
-            put({
-                "type": "run_meta",
+            run_info = {
                 "run_id": run_id,
                 "config_name": config_name,
                 "config_sha": _config_sha,
                 "instance_ids": list(ids),
                 "ts": datetime.now().isoformat(),
-            })
+            }
+            put({"type": "run_meta", **run_info})
+            # Every instance's trajectory.json exists (queued) from here on.
+            try:
+                rec_state["run"] = RunRecorder(
+                    run_dir,
+                    run_info=run_info,
+                    agent_extra={
+                        "config_name": config_name, "config_sha": _config_sha,
+                        "edges": list(cfg.get("edges") or []),
+                        "start": cfg.get("entry") or cfg.get("start"), "end": cfg.get("end"),
+                    },
+                    instances=[(iid, _issue_text(by_id[iid])) for iid in ids],
+                )
+                rec_state["run_dir"] = str(run_dir)
+            except Exception as exc:  # recording must never stop a run
+                logger.warning("ATIF run log not created for %s: %s", run_id, exc)
 
             # Preflight: pull any referenced Ollama models that aren't on
             # disk yet. Progress events route through put() → SSE so the
@@ -215,6 +248,7 @@ async def run_inference(req: InferenceRequest):
             try:
                 preflight_models(cfg, event_sink=put)
             except _OpendracoError as exc:
+                fail(str(exc))
                 put({"type": "error", "message": str(exc)})
                 return
 
@@ -237,7 +271,7 @@ async def run_inference(req: InferenceRequest):
                 "run_id": run_id,
                 "config_label": str(config_name),
                 "instance_ids": list(ids),
-                "log_path": internal_log_path,
+                "run_dir": stem,
                 "started_at": int(datetime.now().timestamp() * 1000),
             }
 
@@ -300,6 +334,9 @@ async def run_inference(req: InferenceRequest):
                 instance = by_id[iid]
                 instance_started_at = int(datetime.now().timestamp() * 1000)
                 put({"type": "instance_start", "instance_id": iid, "index": idx, "total": len(ids)})
+                inst = rec_state["run"].instance(iid) if rec_state["run"] else None
+                if inst is not None:
+                    inst.start()
 
                 put({"type": "status", "message": f"Cloning workspace for {iid}…"})
                 workspace = clone_workspace(
@@ -311,12 +348,7 @@ async def run_inference(req: InferenceRequest):
                 import os as _os
                 _os.environ["OPENDRACO_WORKSPACE_PATH"] = str(workspace.path)
 
-                issue_parts: list[str] = []
-                if instance.get("problem_statement"):
-                    issue_parts.append(instance["problem_statement"])
-                if instance.get("hints_text"):
-                    issue_parts.append("\n## Hints\n" + instance["hints_text"])
-                issue_text = "\n".join(issue_parts).strip()
+                issue_text = _issue_text(instance)
 
                 # Order matters: build_state_class reads each agent's
                 # OUTPUT_TYPE ClassVar.
@@ -353,16 +385,50 @@ async def run_inference(req: InferenceRequest):
                         predecessors.setdefault(dst, []).append(src)
                         successors.setdefault(src, []).append(dst)
 
-                def _preview(val: Any) -> Any:
-                    """600-char truncation, matches the delta path below."""
-                    if isinstance(val, str):
-                        return val[:600] + "\n…(truncated)" if len(val) > 600 else val
-                    if isinstance(val, list) and val and all(isinstance(x, str) for x in val):
-                        return [
-                            (x[:600] + "\n…(truncated)" if len(x) > 600 else x)
-                            for x in val
-                        ]
-                    return val
+                # ATIF: one embedded subagent trajectory per activation,
+                # opened when the node starts and closed when it returns.
+                if inst is not None:
+                    from opendraco.utils.handoff import (
+                        preview_payload as _pp,
+                        summarize_payload as _sp,
+                    )
+
+                    def _make_run_hooks(name: str, agent: Any) -> tuple[Any, Any]:
+                        def _start(state: dict[str, Any]) -> None:
+                            inputs = {
+                                pred: safe_serialize(_truncate_preview(state.get(pred)))
+                                for pred in predecessors.get(name, [])
+                                if pred and state.get(pred) not in (None, "", [], {})
+                            }
+                            agent.recorder = inst.begin_activation(
+                                name, inputs,
+                                model_name=getattr(agent.config, "model", None),
+                                tool_definitions=agent.tool_definitions(),
+                            )
+
+                        def _end(delta: dict[str, Any]) -> None:
+                            rec = agent.recorder
+                            agent.recorder = None
+                            if rec is None:
+                                return
+                            delta = delta if isinstance(delta, dict) else {}
+                            primary = delta.get(name, delta)
+                            summary, preview = _sp(primary), _pp(primary)
+                            inst.end_activation(
+                                rec, summary=summary, delta=_truncate_delta(delta),
+                                handoffs=[
+                                    {"to": tgt, "summary": summary, "preview": preview,
+                                     "timestamp": now_iso()}
+                                    for tgt in successors.get(name, [])
+                                ],
+                            )
+
+                        return _start, _end
+
+                    for agent_name, agent in agents.items():
+                        agent.on_run_start, agent.on_run_end = _make_run_hooks(agent_name, agent)
+
+                _preview = _truncate_preview
 
                 accumulated: dict[str, Any] = {}
                 seen_agents: set[str] = set()
@@ -387,15 +453,7 @@ async def run_inference(req: InferenceRequest):
                             })
                             seen_agents.add(agent_name)
                         accumulated.update(delta)
-                        safe_delta = safe_serialize(delta)
-                        # Truncate long patch strings in list-valued slots;
-                        # producer-keyed slots make the field name vary.
-                        for k, v in list(safe_delta.items()):
-                            if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
-                                safe_delta[k] = [
-                                    (x[:600] + "\n…(truncated)" if len(x) > 600 else x)
-                                    for x in v
-                                ]
+                        safe_delta = _truncate_delta(delta)
                         put({"type": "agent_event", "agent": agent_name, "delta": safe_delta})
                         # One `handoff` per outgoing edge. Prefer the
                         # producer slot `delta[agent_name]`; fall back to
@@ -473,6 +531,8 @@ async def run_inference(req: InferenceRequest):
                 with open(output_path, "a", encoding="utf-8") as fh:
                     fh.write(json.dumps(pred) + "\n")
 
+                if inst is not None:
+                    inst.finish("done", model_patch=final_patch)
                 put({
                     "type": "instance_done",
                     "instance_id": iid,
@@ -492,14 +552,17 @@ async def run_inference(req: InferenceRequest):
 
         except Exception as exc:
             import traceback as _tb
+            fail(str(exc), {"message": str(exc), "traceback": _tb.format_exc()})
             put({"type": "error", "message": str(exc), "traceback": _tb.format_exc()})
         finally:
-            fh = log_state.get("fh")
-            if fh is not None:
+            # Instances still queued/running end as the run did: error, or
+            # cancelled (every early `return` above is a cancel).
+            run = rec_state.get("run")
+            if run is not None:
                 try:
-                    fh.close()
-                except OSError:
-                    pass
+                    run.fail_unfinished(outcome["status"], outcome["message"], outcome["error"])
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("ATIF run log not finalised: %s", exc)
             handler = text_log_state.get("handler")
             if handler is not None:
                 try:
@@ -508,11 +571,11 @@ async def run_inference(req: InferenceRequest):
                     handler.close()
                 except (OSError, ValueError):
                     pass
-            # Last, with the log closed: one best-effort publish per run,
+            # Last, with the log final: one best-effort publish per run,
             # whether it finished, failed or was cancelled.
-            if graphectory_state:
+            if rec_state.get("run_dir"):
                 try:
-                    _start_graphectory_publish(**graphectory_state)
+                    _start_graphectory_publish(rec_state["run_dir"])
                 except Exception as exc:
                     logger.warning("Graphectory publish not started: %s", exc)
             _active_run = None
@@ -614,21 +677,24 @@ def build_inference_notebook(req: NotebookRequest) -> Response:
     )
 
 
-@router.get("/api/inference/log-tail")
-def inference_log_tail(path: str, offset: int = 0) -> dict[str, Any]:
-    """Tail bytes of the internal NDJSON log from `offset` onward."""
-    p = safe_under(INFERENCE_INTERNAL_LOGS_DIR, path)
+@router.get("/api/inference/trajectory")
+def inference_trajectory(run_dir: str, instance_id: str, since_mtime: float | None = None) -> dict[str, Any]:
+    """One instance's ATIF trajectory of a run (`run_dir` = the `<stem>`
+    folder under the inference logs). With `since_mtime` equal to the
+    file's current mtime, answers `unchanged: true` without the document
+    so a reattached page re-parses only when the run moved on."""
+    folder = safe_under(INFERENCE_INTERNAL_LOGS_DIR, str(INFERENCE_INTERNAL_LOGS_DIR / run_dir))
+    p = safe_under(folder, str(folder / instance_id / TRAJECTORY_FILE))
+    # Read "running" BEFORE the file: if the run's last write lands in
+    # between, the page then polls once more and sees the final document.
+    is_running = _active_run is not None and _active_run.get("run_dir") == folder.name
     if not p.is_file():
-        raise HTTPException(404, "log file not found")
-    size = p.stat().st_size
-    if offset > size:
-        offset = 0  # truncated/replaced; restart from the top
-    with p.open("rb") as fh:
-        fh.seek(offset)
-        chunk = fh.read()
-    is_running = _active_run is not None and Path(_active_run["log_path"]) == p
-    return {
-        "raw": chunk.decode("utf-8", errors="replace"),
-        "offset": offset + len(chunk),
-        "is_running": is_running,
-    }
+        raise HTTPException(404, "trajectory not found")
+    mtime = p.stat().st_mtime
+    if since_mtime is not None and since_mtime == mtime:
+        return {"trajectory": None, "mtime": mtime, "unchanged": True, "is_running": is_running}
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except ValueError as exc:  # never half-written (atomic), but be safe
+        raise HTTPException(409, "trajectory is being rewritten, retry") from exc
+    return {"trajectory": doc, "mtime": mtime, "unchanged": False, "is_running": is_running}

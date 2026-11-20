@@ -79,8 +79,8 @@ npm_ok=0;    test_cli npm    "Install Node.js 18+ from https://nodejs.org/ (need
 # Graphectory draws a run as a trajectory graph (docs/graphectory_local.md).
 # Its Viewer is a Docker image built from a sibling Graphectory clone (like
 # SWE-bench) and run as the graphectory-viewer container, which reads the
-# runs OpenDraco converts into results/graphectory/ (the converter ships
-# with OpenDraco). The image is ~2.5 GB, so it is asked separately and only
+# ATIF trajectories OpenDraco publishes into results/graphectory/ (the
+# Viewer must be the ATIF fork, branch feat/atif-mas). The image is ~2.5 GB, so it is asked separately and only
 # offered when Docker is present; -y/--yes answers yes.
 GRAPHECTORY_DIR="$REPO_ROOT/Graphectory"
 GRAPHECTORY_IMAGE="graphectory"
@@ -315,12 +315,13 @@ graphectory_warn() {
 }
 
 setup_graphectory() {
-    local url="https://github.com/Intelligent-CAT-Lab/Graphectory.git"
+    local url="https://github.com/xiangfengyepan/Graphectory.git"
+    local branch="feat/atif-mas"
     if [ -d "$GRAPHECTORY_DIR" ]; then
         echo "[install] Graphectory clone already present at $GRAPHECTORY_DIR (leaving as-is)"
     else
-        echo "[install] cloning $url into $GRAPHECTORY_DIR"
-        if ! git clone "$url" "$GRAPHECTORY_DIR"; then
+        echo "[install] cloning $url ($branch) into $GRAPHECTORY_DIR"
+        if ! git clone -b "$branch" "$url" "$GRAPHECTORY_DIR"; then
             graphectory_warn "cloning $url failed."
             return 0
         fi

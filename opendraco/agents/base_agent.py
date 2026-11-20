@@ -1,3 +1,4 @@
+import json
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -11,6 +12,7 @@ from opendraco.models import build_chat, llm_invoke
 
 if TYPE_CHECKING:
     from opendraco.mcp.server import MCPServer
+    from opendraco.utils.atif import AgentTrajectoryRecorder
 
 
 class BaseAgent(ABC):
@@ -97,6 +99,18 @@ class BaseAgent(ABC):
         self.on_response: Callable[[str], None] | None = None
         self.on_tool: Callable[[str, dict[str, Any], Any], None] | None = None
         self.tokens: dict[str, int] = {"input": 0, "output": 0, "total": 0}
+        # ATIF run log (`opendraco.utils.atif`): the worker attaches a
+        # recorder per activation; `_wrap` fires the run hooks around `run()`.
+        self.recorder: AgentTrajectoryRecorder | None = None
+        self.on_run_start: Callable[[dict[str, Any]], None] | None = None
+        self.on_run_end: Callable[[dict[str, Any]], None] | None = None
+        self._call_seq: int = 0
+        self._current_call_id: str | None = None
+
+    def tool_definitions(self) -> list[dict[str, Any]]:
+        """OpenAI-style function schemas of the tools bound to the LLM
+        (ATIF `agent.tool_definitions`); none for agents without tools."""
+        return []
 
     def _call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         if self.tool_policy is not None and name not in self.tool_policy:
@@ -109,10 +123,58 @@ class BaseAgent(ABC):
         if self.tool_policy is not None:
             merged.update(self.tool_policy.get(name) or {})
         merged.update(arguments or {})
-        result = self.mcp.call(name, merged)
+        # Set by the LLM loop around each call; None for programmatic calls.
+        call_id = self._current_call_id
+        try:
+            result = self.mcp.call(name, merged)
+        except Exception as exc:
+            self._record("tool_result", call_id, f"Error: {exc}", name=name, args=merged, error=True)
+            raise
+        self._record("tool_result", call_id, result, name=name, args=merged)
         if self.on_tool:
             self.on_tool(name, merged, result)
         return result
+
+    def _record(self, method: str, *args: Any, **kwargs: Any) -> None:
+        """Call `self.recorder.<method>` if a recorder is attached. Recording
+        must never change what the agent does: a failure is only logged."""
+        rec = self.recorder
+        if rec is None:
+            return
+        try:
+            getattr(rec, method)(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            self.logger.warning("[%s] ATIF recording (%s) failed: %s", self.name, method, exc)
+
+    def _response_tool_calls(self, response: Any) -> list[dict[str, Any]]:
+        """`[{"id", "name", "args"}]` for the tool calls in an LLM response.
+        Calls the provider left without an id get `call_<k>_<name>`, written
+        back onto the response so later readers see the same id."""
+        calls: list[dict[str, Any]] = []
+        native = getattr(response, "tool_calls", None)
+        if native:
+            for c in native:
+                if not c.get("id"):
+                    c["id"] = f"call_{self._call_seq}_{c.get('name', '')}"
+                    self._call_seq += 1
+                calls.append({"id": c["id"], "name": c.get("name", ""), "args": c.get("args") or {}})
+            return calls
+        raw = (getattr(response, "additional_kwargs", None) or {}).get("tool_calls") or []
+        for c in raw:
+            if not isinstance(c, dict):
+                continue
+            fn = c.get("function") or {}
+            args = fn.get("arguments")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = {}
+            if not c.get("id"):
+                c["id"] = f"call_{self._call_seq}_{fn.get('name', '')}"
+                self._call_seq += 1
+            calls.append({"id": c["id"], "name": fn.get("name", ""), "args": args or {}})
+        return calls
 
     def make_llm(self, **overrides: Any) -> BaseChatModel:
         """Construct the LangChain ChatModel for this agent's configured provider (selected from the `<provider>/<model>` prefix on `self.config.model`)."""
@@ -127,17 +189,21 @@ class BaseAgent(ABC):
         self.tokens["output"] += int(usage.get("output", 0))
         self.tokens["total"]  += int(usage.get("total", 0))
         # `content` may be a string or list of content-blocks; coerce to text.
-        if self.on_response is not None:
-            raw = getattr(response, "content", "")
-            if isinstance(raw, list):
-                text = "".join(
-                    c.get("text", "") if isinstance(c, dict) else str(c)
-                    for c in raw
-                )
-            else:
-                text = str(raw or "")
-            if text:
-                self.on_response(text)
+        raw = getattr(response, "content", "")
+        if isinstance(raw, list):
+            text = "".join(
+                c.get("text", "") if isinstance(c, dict) else str(c)
+                for c in raw
+            )
+        else:
+            text = str(raw or "")
+        tool_calls = self._response_tool_calls(response)
+        self._record(
+            "llm_call", message=text, reasoning=self._thinking or "", tool_calls=tool_calls,
+            usage=usage, model_name=self.config.model or None,
+        )
+        if self.on_response is not None and text:
+            self.on_response(text)
         return response
 
     def _producer_value(self) -> Any:

@@ -6,15 +6,13 @@ Results page's **Graphectory** tab. Everything runs on your machine:
 
 | Piece | What it is |
 |---|---|
-| **Viewer** | Graphectory's own web app, run as the Docker container `graphectory-viewer` from the `graphectory` image. You build and run it with docker; OpenDraco never starts, creates or removes it. |
-| **Converter** | Part of OpenDraco (`opendraco/utils/graphectory_converter/`, from [OpenDraco/graphectory-opendraco](https://github.com/OpenDraco/graphectory-opendraco)). It turns a run's log into a trajectory the Viewer reads and writes it to `<RESULTS_DIR>/graphectory/`, the folder the container reads as `/data`. Nothing to install. |
+| **Run log** | Every inference run is recorded as [ATIF](https://docs.harborframework.com/agents/atif) (`ATIF-v1.8`): one `trajectory.json` per instance in `opendraco/logs/inference_logs/<stem>/<instance_id>/`. Multi-agent runs are nested: the root trajectory is the graph engine, each agent activation an embedded subagent trajectory (`<agent>#<n>`). |
+| **Viewer** | Graphectory's web app built from the ATIF fork, [xiangfengyepan/Graphectory `feat/atif-mas`](https://github.com/xiangfengyepan/Graphectory/tree/feat/atif-mas), run as the Docker container `graphectory-viewer` from the `graphectory` image. Stock Graphectory cannot read ATIF. You build and run it with docker; OpenDraco never starts, creates or removes it. |
 
-The converter flattens a whole multi-agent run into one "super-agent"
-trajectory: every agent's activations in run order, each opened by a
-*recall* step naming the agent and what it received. Graphectory itself is
-not modified. One run = one graph.
-
-Checked against Graphectory commit `5f456b1` (2026-10-28).
+Publishing copies a run's trajectories into `<RESULTS_DIR>/graphectory/<run_id>/<instance_id>/`,
+the folder the container reads as `/data`. There is no converter: the
+Viewer reads ATIF itself and draws one graph per instance (id
+`<run_id>.<instance_id>`), inlining every agent activation.
 
 ## Set it up
 
@@ -26,7 +24,7 @@ hand, from the OpenDraco checkout's root:
 git-ignored:
 
 ```bash
-git clone https://github.com/Intelligent-CAT-Lab/Graphectory.git Graphectory
+git clone -b feat/atif-mas https://github.com/xiangfengyepan/Graphectory.git Graphectory
 docker build -t graphectory Graphectory
 ```
 
@@ -67,18 +65,22 @@ port or another `/data` folder), it prints the docker command that fixes it.
 
 Run OpenDraco as usual, `opendraco api` and `opendraco web`:
 
-- Every inference run that ends is converted into the Viewer in the
-  background. On the Results page, the run's **Graphectory** tab shows its
-  graph.
-- **Analyze in Graphectory** converts the selected run on demand, for
-  example a run from before Graphectory was set up, and shows its graph.
-- The Viewer itself is at <http://localhost:9610>, listing every converted
-  run.
+- Every inference run that ends is published into the Viewer in the
+  background. On the Results page, the **Graphectory** tab shows the
+  selected instance's graph.
+- **Analyze in Graphectory** publishes the selected run on demand, for
+  example a run from before Graphectory was set up.
+- The Viewer itself is at <http://localhost:9610>, listing every published
+  instance.
+- Publishing removes any Claude Code sessions an older OpenDraco converter
+  left in `results/graphectory/` (the Viewer reads one format per folder,
+  and those would hide the ATIF runs).
 
-To convert all the runs you already have in one go:
+Runs recorded before ATIF (an `inference_logs/<stem>.ndjson`) are converted
+once with the migration script (add `--publish` to also publish them):
 
 ```bash
-~/.opendraco-venv/bin/python scripts/graphectory_convert.py
+~/.opendraco-venv/bin/python scripts/ndjson_to_atif.py
 ```
 
 The tab embeds the Viewer only when it is on another origin than the app.
@@ -105,7 +107,7 @@ docker rm -f graphectory-viewer       # remove it (then step 2 re-creates it)
 - **Remove a run:** delete its folder from `results/graphectory/`.
 - **Remove everything:** `uninstall.sh --purge` / `uninstall.ps1 --purge`
   removes the container, the image and the `Graphectory/` clone (the
-  converted runs stay with your results), along with the rest of the
+  published runs stay with your results), along with the rest of the
   OpenDraco install and the `.env` files.
 - **Turn it off:** empty `GRAPHECTORY_URL` and restart the API. The tab then
   only says the setting is missing.
@@ -115,6 +117,6 @@ docker rm -f graphectory-viewer       # remove it (then step 2 re-creates it)
 | Symptom | Fix |
 |---|---|
 | *Could not reach the Graphectory Viewer* | Run `opendraco status`: it says whether the container is missing or stopped and gives the command. `docker logs graphectory-viewer` shows why it stopped. |
-| *The Graphectory Viewer does not list run …* | The container reads another folder. `opendraco status` names it and gives the `docker rm -f` + `docker run` to re-create it on `<RESULTS_DIR>/graphectory`. |
+| *The Graphectory Viewer does not list …* | Either the image was built from stock Graphectory, which can't read ATIF (rebuild it from the fork's `feat/atif-mas`, step 1), or the container reads another folder: `opendraco status` names it and gives the `docker rm -f` + `docker run` to re-create it on `<RESULTS_DIR>/graphectory`. |
 | *port is already allocated* from `docker run` | Something else uses that port: pick another one (see *Another port*). |
 | The tab shows the link but no graph | The Viewer is on the app's origin, or the frontend is served over `https` (the browser blocks an `http` page inside it); use **New tab**. |

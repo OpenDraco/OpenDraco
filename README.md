@@ -211,14 +211,14 @@ A bare model name without a `/` (e.g. `"qwen3.5:9b"`) is treated as `ollama/...`
 
 ### Graphectory tab on the Results page
 
-Graphectory turns a recorded agent run into an interactive trajectory graph: one node per distinct action, edges in the order the agents took them, each action labelled with a problem-solving phase, plus a run view of how the agents handed work to each other. The Results page gets a **Graphectory** tab next to *Prediction & evaluation*. Everything runs on your machine. The Viewer is a Docker container built from [Intelligent-CAT-Lab/Graphectory](https://github.com/Intelligent-CAT-Lab/Graphectory); the converter that turns a run into a graph ships with OpenDraco (`opendraco/utils/graphectory_converter/`, from [OpenDraco/graphectory-opendraco](https://github.com/OpenDraco/graphectory-opendraco)), so nothing else is installed. Set it up once from the repo root (or answer yes to the installer's Graphectory question, which runs the same docker commands):
+Graphectory turns a recorded agent run into an interactive trajectory graph: one node per distinct action, edges in the order the agents took them, each action labelled with a problem-solving phase, plus a run view of how the agents handed work to each other. The Results page gets a **Graphectory** tab next to *Prediction & evaluation*. Everything runs on your machine. OpenDraco records every run as [ATIF](https://docs.harborframework.com/agents/atif) (`opendraco/logs/inference_logs/<stem>/<instance_id>/trajectory.json`), and the Viewer reads ATIF directly, so there is no converter. The Viewer is a Docker container built from the ATIF fork of Graphectory, [xiangfengyepan/Graphectory `feat/atif-mas`](https://github.com/xiangfengyepan/Graphectory/tree/feat/atif-mas) (stock Intelligent-CAT-Lab/Graphectory cannot read ATIF). Set it up once from the repo root (or answer yes to the installer's Graphectory question, which runs the same docker commands):
 
 ```bash
 # 1. Build the Viewer's image
-git clone https://github.com/Intelligent-CAT-Lab/Graphectory.git Graphectory
+git clone -b feat/atif-mas https://github.com/xiangfengyepan/Graphectory.git Graphectory
 docker build -t graphectory Graphectory
 
-# 2. Run it, reading the runs OpenDraco converts into results/graphectory/
+# 2. Run it, reading the ATIF runs OpenDraco publishes into results/graphectory/
 docker run -d --name graphectory-viewer --restart unless-stopped -p 9610:9610 \
   -v "$PWD/results/graphectory:/data" \
   graphectory python graph_construction/live_graph_server.py --port 9610
@@ -230,9 +230,9 @@ GRAPHECTORY_URL="http://localhost:9610"
 
 After that you only run `opendraco api` and `opendraco web`; the container keeps running on its own (`--restart unless-stopped`). OpenDraco never starts, creates or removes it. `opendraco status` checks it and prints the docker command for anything that is off, such as a stopped container, another port or another data folder.
 
-- **Analyze in Graphectory** converts the selected run's inference event log (`opendraco/logs/inference_logs/<stem>.ndjson`) into the Viewer and shows the run's graph. The log holds every instance of the run, so it is one graph per run, under the run's sanitised id. Finished runs are converted on their own when they end.
-- The tab shows the link with a **Copy** button, and embeds the page in an iframe (`sandbox="allow-scripts allow-same-origin allow-popups"`). That sandbox is safe only because the Viewer is on another origin than the app; when both share an origin the link is shown without embedding. **New tab** opens the link in a browser tab. The link is also saved as `<stem>.graphectory-link.json` next to the `.ndjson`, so the tab shows it again later.
-- Errors say what to fix: the Viewer not running, a container that reads another folder, or a run the converter cannot read.
+- **Analyze in Graphectory** publishes the selected run's ATIF trajectories into the Viewer and shows the selected instance's graph: one graph per instance, with id `<run_id>.<instance_id>`. Finished runs are published on their own when they end.
+- The tab shows the link with a **Copy** button, and embeds the page in an iframe (`sandbox="allow-scripts allow-same-origin allow-popups"`). That sandbox is safe only because the Viewer is on another origin than the app; when both share an origin the link is shown without embedding. **New tab** opens the link in a browser tab. The links are also saved as `graphectory-links.json` in the run's log folder, so the tab shows them again later.
+- Errors say what to fix: the Viewer not running, a container that reads another folder, or a Viewer that can't read ATIF (built from stock Graphectory instead of the fork).
 
 More detail, including updating and troubleshooting, is in [docs/graphectory_local.md](./docs/graphectory_local.md).
 

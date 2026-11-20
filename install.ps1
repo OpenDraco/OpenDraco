@@ -102,8 +102,8 @@ if (-not $wslOk) {
 # Graphectory draws a run as a trajectory graph (docs\graphectory_local.md).
 # Its Viewer is a Docker image built from a sibling Graphectory clone (like
 # SWE-bench) and run as the graphectory-viewer container, which reads the
-# runs OpenDraco converts into results\graphectory\ (the converter ships
-# with OpenDraco). The image is ~2.5 GB, so it is asked separately and only
+# ATIF trajectories OpenDraco publishes into results\graphectory\ (the
+# Viewer must be the ATIF fork, branch feat/atif-mas). The image is ~2.5 GB, so it is asked separately and only
 # offered when Docker is present; -y/--yes answers yes. Unlike the SWE-bench
 # harness it does not need WSL2.
 $GraphectoryDir       = Join-Path $RepoRoot "Graphectory"
@@ -354,12 +354,13 @@ function Install-Graphectory {
     # Each step's exit code decides whether it worked.
     $ErrorActionPreference = "Continue"
 
-    $url = "https://github.com/Intelligent-CAT-Lab/Graphectory.git"
+    $url = "https://github.com/xiangfengyepan/Graphectory.git"
+    $branch = "feat/atif-mas"
     if (Test-Path $GraphectoryDir) {
         Write-Host "[install] Graphectory clone already present at $GraphectoryDir (leaving as-is)" -ForegroundColor Cyan
     } else {
-        Write-Host "[install] cloning $url into $GraphectoryDir" -ForegroundColor Cyan
-        git clone $url $GraphectoryDir
+        Write-Host "[install] cloning $url ($branch) into $GraphectoryDir" -ForegroundColor Cyan
+        git clone -b $branch $url $GraphectoryDir
         if ($LASTEXITCODE -ne 0) {
             Write-GraphectoryWarning "cloning $url failed."
             return

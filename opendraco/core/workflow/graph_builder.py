@@ -40,6 +40,7 @@ def _wrap(
     sources — the router emits its own log lines for the targets actually
     picked, otherwise we'd over-count every potential successor."""
     def node(state: dict[str, Any]) -> dict[str, Any]:
+        _run_hook(agent, "on_run_start", state)
         try:
             delta = agent.run(dict(state))
         except OllamaMemoryError:
@@ -48,16 +49,31 @@ def _wrap(
             logger.error("agent %s failed: %s", agent.name, exc)
             errors: list[str] = list(state.get("errors") or [])
             errors.append(f"{agent.name}: {exc}")
-            return {"errors": errors}
+            failed = {"errors": errors}
+            _run_hook(agent, "on_run_end", failed)
+            return failed
 
         # Canonical producer slot is `delta[agent.name]` (edge-driven IO);
         # fall back to the whole delta when the agent wrote to other keys.
         if targets and not conditional and isinstance(delta, dict):
             primary = delta.get(agent.name, delta)
             _emit_handoff_log(agent.name, targets, primary)
+        _run_hook(agent, "on_run_end", delta)
         return delta
 
     return node
+
+
+def _run_hook(agent: BaseAgent, hook: str, arg: Any) -> None:
+    """Fire `agent.on_run_start` / `on_run_end` (the ATIF recorder's
+    activation boundaries). A failing hook is logged, never raised."""
+    fn = getattr(agent, hook, None)
+    if fn is None:
+        return
+    try:
+        fn(arg)
+    except Exception as exc:  # noqa: BLE001 — recording must not break a run
+        logger.warning("agent %s %s hook failed: %s", agent.name, hook, exc)
 
 
 def _emit_handoff_log(source: str, picked: list[str], primary: Any) -> None:

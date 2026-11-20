@@ -121,6 +121,66 @@ export interface Instance {
   split: SwebenchSplit;
 }
 
+// ─── ATIF (Agent Trajectory Interchange Format, ATIF-v1.8) ──────────────────
+// The stored run log: one trajectory per instance; the root is the graph
+// engine, each agent activation an embedded subagent trajectory.
+export interface AtifToolCall {
+  tool_call_id: string;
+  function_name: string;
+  arguments: Record<string, unknown>;
+  extra?: Record<string, unknown>;
+}
+
+export interface AtifObservationResult {
+  source_call_id?: string | null;
+  content?: string | unknown[] | null;
+  subagent_trajectory_ref?: Array<{ trajectory_id?: string; trajectory_path?: string | null }>;
+  extra?: Record<string, unknown>;
+}
+
+export interface AtifMetrics {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  cached_tokens?: number;
+  cost_usd?: number;
+  extra?: Record<string, unknown>;
+}
+
+export interface AtifStep {
+  step_id: number;
+  timestamp?: string;
+  source: 'system' | 'user' | 'agent';
+  model_name?: string;
+  message: string | unknown[];
+  reasoning_content?: string;
+  tool_calls?: AtifToolCall[];
+  observation?: { results: AtifObservationResult[] };
+  metrics?: AtifMetrics;
+  llm_call_count?: number | null;
+  extra?: Record<string, unknown>;
+}
+
+export interface AtifFinalMetrics {
+  total_prompt_tokens?: number;
+  total_completion_tokens?: number;
+  total_cached_tokens?: number;
+  total_cost_usd?: number;
+  total_steps?: number;
+  extra?: Record<string, unknown>;
+}
+
+export interface AtifTrajectory {
+  schema_version: string;
+  session_id?: string;
+  trajectory_id?: string;
+  agent: { name: string; version: string; model_name?: string; tool_definitions?: unknown[]; extra?: Record<string, unknown> };
+  steps: AtifStep[];
+  notes?: string;
+  final_metrics?: AtifFinalMetrics;
+  subagent_trajectories?: AtifTrajectory[];
+  extra?: Record<string, unknown>;
+}
+
 export interface InferenceEvent {
   type:
     | 'status' | 'start' | 'agent_event' | 'thinking_chunk' | 'response'
@@ -276,14 +336,13 @@ export interface GraphectoryStatus {
 /** `POST /api/results/prediction/graphectory` — a run's log was
  * uploaded; `graph` is the run's page in the Viewer. */
 export interface GraphectoryUpload {
-  graph: string;
+  /** One Viewer link per instance of the run (instance id → link). */
+  links: Record<string, string>;
   run_id: string;
-  /** The inference `.ndjson` that was uploaded. */
-  log_name: string;
 }
 
 /** `GET /api/results/prediction/graphectory` — the link a past upload of
- * the run saved, or `null`. */
+ * the run saved for one instance, or `null`. */
 export interface GraphectoryLink {
   graph: string | null;
 }

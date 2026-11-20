@@ -259,6 +259,7 @@ describe('ResultsComponent Graphectory tab', () => {
   const PRED_PATH = '/repo/results/predictions/prediction-chain-4f7d9f56.jsonl';
   const LINK = 'https://viewer.example:9610/graph/opendraco/chain-4f7d9f56';
   const CONFIGURED = { configured: true, url: 'https://viewer.example:9610', missing: [] };
+  const OTHER_LINK = 'https://viewer.example:9610/api/graph?id=chain-4f7d9f56.astropy__astropy-12907';
   const NO_LINK = { getSavedGraphectoryLink: vi.fn(() => of({ graph: null })) };
 
   function instancesWithPrediction(): ResultInstance[] {
@@ -299,9 +300,10 @@ describe('ResultsComponent Graphectory tab', () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
-  it('goes uploading -> ready and uploads the selected run once, with no instance id', () => {
+  it('goes uploading -> ready and shows the selected instance of the uploaded run', () => {
     const upload = vi.fn(() => of({
-      graph: LINK, run_id: 'chain-4f7d9f56', log_name: 'prediction-chain-4f7d9f56.ndjson',
+      links: { 'django__django-10973': LINK, 'astropy__astropy-12907': OTHER_LINK },
+      run_id: 'chain-4f7d9f56',
     }));
     const app = open({
       getGraphectoryStatus: vi.fn(() => of(CONFIGURED)),
@@ -311,6 +313,16 @@ describe('ResultsComponent Graphectory tab', () => {
     expect(upload).toHaveBeenCalledWith(PRED_PATH);
     expect(app.graphectoryState).toBe('ready');
     expect(app.graphectoryLink).toBe(LINK);
+  });
+
+  it('says so when the uploaded run has no graph for the selected instance', () => {
+    const app = open({
+      getGraphectoryStatus: vi.fn(() => of(CONFIGURED)),
+      uploadToGraphectory: vi.fn(() => of({ links: { other__x: OTHER_LINK }, run_id: 'chain-4f7d9f56' })),
+    });
+    app.analyzeInGraphectory();
+    expect(app.graphectoryState).toBe('error');
+    expect(app.graphectoryError).toContain('django__django-10973');
   });
 
   it('stays uploading until the API answers', () => {
@@ -358,7 +370,7 @@ describe('ResultsComponent Graphectory tab', () => {
       getSavedGraphectoryLink: saved,
       uploadToGraphectory: upload,
     });
-    expect(saved).toHaveBeenCalledWith(PRED_PATH);
+    expect(saved).toHaveBeenCalledWith(PRED_PATH, 'django__django-10973');
     expect(app.graphectoryState).toBe('ready');
     expect(app.graphectoryLink).toBe(LINK);
     expect(upload).not.toHaveBeenCalled();
@@ -379,5 +391,75 @@ describe('ResultsComponent Graphectory tab', () => {
     } finally {
       opener.mockRestore();
     }
+  });
+});
+
+describe('ResultsComponent log viewer', () => {
+  const PRED_PATH = '/repo/results/predictions/prediction-chain-4f7d9f56.jsonl';
+  const IID = 'django__django-10973';
+
+  function trajectory() {
+    return {
+      schema_version: 'ATIF-v1.8', session_id: 'chain-4f7d9f56',
+      agent: { name: 'opendraco', version: '0.1.0' },
+      steps: [
+        { step_id: 1, source: 'user', message: 'fix', timestamp: '2026-11-20T10:00:00Z' },
+        {
+          step_id: 2, source: 'agent', llm_call_count: 0, message: 'dispatch locator',
+          timestamp: '2026-11-20T10:00:01Z',
+          tool_calls: [{ tool_call_id: 'dispatch-1', function_name: 'run_agent', arguments: { agent: 'locator', inputs: {} } }],
+          observation: { results: [{
+            source_call_id: 'dispatch-1', content: 's',
+            subagent_trajectory_ref: [{ trajectory_id: 'locator#1' }],
+            extra: { delta: { locator: 'foo.py' }, delta_keys: ['locator'], handoffs: [] },
+          }] },
+        },
+      ],
+      subagent_trajectories: [{
+        schema_version: 'ATIF-v1.8', trajectory_id: 'locator#1', agent: { name: 'locator', version: '0.1.0' },
+        steps: [{ step_id: 1, source: 'agent', llm_call_count: 1, message: 'Found it', timestamp: '2026-11-20T10:00:03Z' }],
+      }],
+      extra: { instance_id: IID, status: 'done', model_patch: '' },
+    };
+  }
+
+  function openViewer(trajectoryAnswer: unknown) {
+    vi.useFakeTimers();
+    try {
+      const inst = mkInstance(IID, [{ run_id: 'chain-4f7d9f56' }]);
+      inst.runs[0].prediction = { path: PRED_PATH, name: 'prediction-chain-4f7d9f56.jsonl', mtime: 0 };
+      const getTrajectory = vi.fn(() => of(trajectoryAnswer));
+      const { app } = makeResults(
+        { runId: 'chain-4f7d9f56', instanceId: IID }, [inst],
+        { getResultTrajectory: getTrajectory, getAgentTypes: vi.fn(() => of([])) },
+      );
+      app.ngOnInit();
+      vi.runAllTimers();
+      app.openLogViewer();
+      return { app, getTrajectory };
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+
+  it("shows the selected instance's cards from its ATIF trajectory, with real timings", async () => {
+    const { app, getTrajectory } = openViewer({
+      exists: true, name: 'trajectory.json', path: 'x', trajectory: trajectory(),
+    });
+    await flush();
+    expect(getTrajectory).toHaveBeenCalledWith(PRED_PATH, IID);
+    expect(app.logViewError).toBe('');
+    expect(app.logViewInstance?.cards.map(c => c.agent)).toEqual(['locator']);
+    expect(app.logViewInstance?.cards[0].responseStream).toBe('Found it');
+    expect(app.logViewInstance?.cards[0].durationMs).toBe(2000);
+  });
+
+  it('says so when the run has no trajectory', async () => {
+    const { app } = openViewer({ exists: false, name: 'trajectory.json', path: 'x', trajectory: null });
+    await flush();
+    expect(app.logViewInstance).toBeNull();
+    expect(app.logViewError).toContain('trajectory');
   });
 });

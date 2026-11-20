@@ -1,4 +1,4 @@
-/** Prediction box: metadata KVs, model_patch diff, optional raw NDJSON log
+/** Prediction box: metadata KVs, model_patch diff, optional raw text log
  * toggle, and the action row (download/reveal/View). Pure presentation —
  * parent owns all the async loads and `formatDiff()`. */
 import { Component, EventEmitter, Input, Output } from '@angular/core';

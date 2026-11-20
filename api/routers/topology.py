@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from opendraco.utils.atif import read_run_info
 from api.common import (
     INFERENCE_INTERNAL_LOGS_DIR,
     LOADED_CONFIG_DIR,
@@ -310,29 +311,27 @@ def list_runs_for_config_sha(name: str, sha: str) -> dict[str, Any]:
         raise HTTPException(400, "invalid sha")
     matches: list[dict[str, Any]] = []
     if INFERENCE_INTERNAL_LOGS_DIR.is_dir():
-        # `run_meta` is always the first event — read one line per sidecar.
-        for ndjson in INFERENCE_INTERNAL_LOGS_DIR.glob("*.ndjson"):
-            try:
-                with ndjson.open("r", encoding="utf-8") as f:
-                    first = f.readline()
-                if not first.strip():
-                    continue
-                meta = json.loads(first)
-                if meta.get("type") != "run_meta":
-                    continue
-                if meta.get("config_name") != name:
-                    continue
-                run_sha = meta.get("config_sha") or ""
-                if not run_sha:
-                    continue
-                if run_sha.startswith(sha) or sha.startswith(run_sha):
-                    matches.append({
-                        "runId": meta.get("run_id") or ndjson.stem.replace("prediction-", ""),
-                        "instanceIds": meta.get("instance_ids") or [],
-                        "ts": meta.get("ts") or "",
-                    })
-            except (OSError, json.JSONDecodeError):
+        # Each run is a folder of ATIF trajectories; every one carries the
+        # run's identity in `extra.run` (config name + git SHA).
+        for run_dir in INFERENCE_INTERNAL_LOGS_DIR.iterdir():
+            if not run_dir.is_dir():
                 continue
+            meta = None
+            for traj in sorted(run_dir.glob("*/trajectory.json")):
+                meta = read_run_info(traj)  # reads only the file's head
+                if meta is not None:
+                    break
+            if meta is None or meta.get("config_name") != name:
+                continue
+            run_sha = meta.get("config_sha") or ""
+            if not run_sha:
+                continue
+            if run_sha.startswith(sha) or sha.startswith(run_sha):
+                matches.append({
+                    "runId": meta.get("run_id") or run_dir.name.replace("prediction-", ""),
+                    "instanceIds": meta.get("instance_ids") or [],
+                    "ts": meta.get("ts") or "",
+                })
     matches.sort(key=lambda m: m.get("ts") or "", reverse=True)
     return {"matches": matches}
 

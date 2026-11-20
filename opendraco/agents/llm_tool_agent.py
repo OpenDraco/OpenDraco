@@ -128,6 +128,8 @@ class LLMToolAgent(BaseAgent):
             llm = llm.bind_tools(tools)
 
         messages: list[Any] = [SystemMessage(content=system), HumanMessage(content=user_msg)]
+        self._record_prompt("system", system)
+        self._record_prompt("user", user_msg)
         for step in range(self.max_iters):
             self.logger.info("[%s] iter %d/%d", self.name, step + 1, self.max_iters)
             response = self._invoke(llm, messages)  # pyright: ignore[reportArgumentType]
@@ -147,10 +149,13 @@ class LLMToolAgent(BaseAgent):
                 args = call.get("args") or {}
                 call_id = call.get("id") or f"call_{step}_{tname}"
                 self.logger.info("[%s] tool %s args=%s", self.name, tname, str(args)[:200])
+                self._current_call_id = call_id
                 try:
                     result = self._call_tool(tname, args)
                 except Exception as exc:
                     result = f"Error: {exc}"
+                finally:
+                    self._current_call_id = None
                 messages.append(
                     ToolMessage(
                         content=self._stringify(result),
@@ -172,12 +177,14 @@ class LLMToolAgent(BaseAgent):
         if not self._final_response_text.strip():
             self.logger.info("[%s] max_iters reached without response — running summary fallback", self.name)
             try:
-                summary_messages = list(messages) + [HumanMessage(content=(
+                summary_prompt = (
                     "You have used all available iterations. Based on what "
                     "you have found so far, emit your FINAL response now in "
                     "the format your system prompt requires. Do NOT call any "
                     "more tools."
-                ))]
+                )
+                summary_messages = list(messages) + [HumanMessage(content=summary_prompt)]
+                self._record_prompt("user", summary_prompt)
                 response = self._invoke(self.make_llm(), summary_messages)
                 self._capture_response_text(response)
             except Exception as exc:
@@ -217,6 +224,7 @@ class LLMToolAgent(BaseAgent):
             "Produce a unified diff that fixes the issue. Wrap it in <patch>...</patch>.\n\n"
             f"## Repository\n{workspace}\n\n## Issue\n{issue[:6000]}\n"
         )
+        self._record_prompt("user", prompt)
         try:
             response = self._invoke(
                 self.make_llm(),
@@ -279,6 +287,21 @@ class LLMToolAgent(BaseAgent):
         except Exception as exc:
             self.logger.warning("[%s] last-resort: could not modify %s: %s",
                                 self.name, target_name, exc)
+
+    def _record_prompt(self, source: str, message: str) -> None:
+        """Hand a prompt to the ATIF recorder, if one is attached."""
+        self._record("prompt", source, message)
+
+    def tool_definitions(self) -> list[dict[str, Any]]:
+        """OpenAI function schemas of the bound tools (ATIF `tool_definitions`)."""
+        from langchain_core.utils.function_calling import convert_to_openai_tool
+        out: list[dict[str, Any]] = []
+        for t in self._bound_tools():
+            try:
+                out.append(convert_to_openai_tool(t))
+            except Exception:  # noqa: BLE001 — a schema we can't express is skipped
+                continue
+        return out
 
     def _bound_tools(self) -> list[Any]:
         """Resolve the BaseTool objects to bind to the LLM straight from
