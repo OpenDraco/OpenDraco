@@ -782,6 +782,35 @@ def test_status_without_docker(
     assert "[WARN]" in line and "docker CLI not available" in line
 
 
+def test_status_skips_local_docker_for_a_viewer_on_another_machine(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Runs are uploaded to a remote Viewer, so this machine's image and
+    container say nothing about it and are not inspected."""
+    monkeypatch.setenv("GRAPHECTORY_URL", "https://server.example.ts.net:9610")
+    inspected: list[int] = []
+    monkeypatch.setattr(cli_mod, "_graphectory_container_status", lambda: inspected.append(1))
+    result = _invoke(runner, ["status"])
+    assert result.exit_code == 0, result.output
+    line = next(l for l in result.output.splitlines() if "graphectory server" in l)
+    assert "[ OK ]" in line and "another machine" in line and "uploaded" in line
+    assert "graphectory image" not in result.output
+    assert "graphectory container" not in result.output
+    assert inspected == []
+
+
+def test_status_warns_when_a_remote_viewer_does_not_answer(
+    runner: CliRunner, stub_status_probes: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GRAPHECTORY_URL", "http://100.117.74.33:9610")
+    monkeypatch.setattr(cli_mod, "_graphectory_reachable", lambda url: False)
+    result = _invoke(runner, ["status"])
+    assert result.exit_code == 0, result.output
+    line = next(l for l in result.output.splitlines() if "graphectory server" in l)
+    assert "[WARN]" in line and "http or https" in line
+    assert "container running" not in line
+
+
 # ─── help-text examples ──────────────────────────────────────────────────────
 
 

@@ -1,21 +1,30 @@
-"""Local Graphectory: publish runs into the Viewer.
+"""Graphectory: publish runs into the Viewer.
 
 Graphectory turns a recorded agent run into an interactive trajectory
-graph. Everything runs on this machine:
+graph:
 
 - every inference run is recorded as ATIF (`opendraco.utils.atif`): one
   `trajectory.json` per instance under
-  `opendraco/logs/inference_logs/<stem>/<instance_id>/`. `publish_run`
-  copies them into `<RESULTS_DIR>/graphectory/<run_id>/<instance_id>/`;
-- the **Viewer** (`GRAPHECTORY_URL`, e.g. `http://localhost:9610`) is the
-  Graphectory Docker container `graphectory-viewer`, built from the ATIF
-  fork (`GRAPHECTORY_REPO`, branch `GRAPHECTORY_BRANCH`) with that folder as
-  its `/data`. It reads ATIF directly (one graph per instance, id =
-  `trajectory_id` = `<run_id>.<instance_id>`), so OpenDraco ships no
-  converter. OpenDraco never starts, creates or removes the container: it is
-  built and run with plain docker commands (`BUILD_COMMAND`, `run_command`),
-  and `viewer_container_status` only reads its state for `opendraco status`.
-  `GET /` is the Viewer's liveness check.
+  `opendraco/logs/inference_logs/<stem>/<instance_id>/`;
+- the **Viewer** (`GRAPHECTORY_URL`) is Graphectory built from the ATIF
+  fork (`GRAPHECTORY_REPO`, branch `GRAPHECTORY_BRANCH`). It reads ATIF
+  directly (one graph per instance, id = `trajectory_id` =
+  `<run_id>.<instance_id>`), so OpenDraco ships no converter. `GET /` is its
+  liveness check.
+
+`publish_run` gets a run to the Viewer in one of two ways, by where
+`GRAPHECTORY_URL` points (`is_local_viewer`):
+
+- **this machine** (e.g. `http://localhost:9610`): the Viewer is the Docker
+  container `graphectory-viewer` with `<RESULTS_DIR>/graphectory` as its
+  `/data`. The trajectories are copied into that folder and the Viewer is
+  told to reload it. OpenDraco never starts, creates or removes the
+  container: it is built and run with plain docker commands
+  (`BUILD_COMMAND`, `run_command`), and `viewer_container_status` only reads
+  its state for `opendraco status`;
+- **another machine**: the Viewer cannot see this machine's folders, so each
+  trajectory is sent to its `POST /api/upload` (`upload_run`). That Viewer
+  must be started with `--upload_dir`.
 
 `GRAPHECTORY_URL` unset or empty disables all of it. Runs that end are
 published in the background by `publish_run_dir` (best-effort, never
@@ -67,6 +76,8 @@ BUILD_COMMAND = (
     f"git clone -b {GRAPHECTORY_BRANCH} {GRAPHECTORY_REPO} Graphectory; "
     f"docker build -t {IMAGE} Graphectory"
 )
+# Where the setup of a Viewer on another machine is described.
+REMOTE_VIEWER_DOC = "docs/graphectory_local.md, 'Viewer on another machine'"
 
 
 def run_command(port: int = CONTAINER_PORT, data_dir: Path | None = None) -> str:
@@ -86,6 +97,8 @@ STATUS_TIMEOUT_S = 5.0
 STATUS_PATH = "/"
 # One request to the Viewer's API.
 VIEWER_TIMEOUT_S = 10.0
+# Sending one trajectory to a Viewer on another machine (a few MB of JSON).
+UPLOAD_TIMEOUT_S = 60.0
 # How long `publish_run` waits for the Viewer to list a run after reloading
 # its data folder (the Results page's request waits for it).
 LIST_WAIT_S = 45.0
@@ -99,11 +112,14 @@ _publish_lock = threading.Lock()
 
 class GraphectoryError(Exception):
     """A failed publish. `status` is the HTTP status the api should answer
-    with; `str(exc)` is the message shown on the Results page."""
+    with; `str(exc)` is the message shown on the Results page.
+    `viewer_status` is the Viewer's own HTTP status when it answered with an
+    error, else `None`."""
 
-    def __init__(self, status: int, message: str) -> None:
+    def __init__(self, status: int, message: str, viewer_status: int | None = None) -> None:
         super().__init__(message)
         self.status = status
+        self.viewer_status = viewer_status
 
 
 # ─── Settings ────────────────────────────────────────────────────────────────
@@ -111,6 +127,16 @@ def graphectory_base_url() -> str:
     """`GRAPHECTORY_URL` (the Viewer) from the environment (loaded from
     `.env` like `OLLAMA_BASE_URL`). Empty means Graphectory is disabled."""
     return os.environ.get("GRAPHECTORY_URL", "").strip().strip("\"'").strip().rstrip("/")
+
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def is_local_viewer(viewer_url: str) -> bool:
+    """True when `GRAPHECTORY_URL` points at this machine (`localhost`,
+    `127.0.0.1` or `::1`): the Viewer then reads `DATA_DIR` through its
+    container's mount. Any other host is a Viewer that needs uploads."""
+    return (urlsplit(viewer_url.strip()).hostname or "").lower() in _LOCAL_HOSTS
 
 
 def is_valid_run_id(run_id: str) -> bool:
@@ -243,13 +269,15 @@ def _check_viewer_url(viewer_url: str) -> SplitResult:
     return parts
 
 
-def _viewer_json(viewer_url: str, method: str, path: str, body: Any = None) -> Any:
+def _viewer_json(viewer_url: str, method: str, path: str, body: Any = None,
+                 timeout: float = VIEWER_TIMEOUT_S) -> Any:
     """One JSON request to the Viewer. Raises `GraphectoryError`: 503 for a
     bad `GRAPHECTORY_URL`, 504 when the Viewer is unreachable, 502 for an
-    error status or an answer that is not JSON."""
+    error status or an answer that is not JSON (`viewer_status` then holds
+    the Viewer's HTTP status)."""
     parts = _check_viewer_url(viewer_url)
     try:
-        conn = _new_connection(parts, VIEWER_TIMEOUT_S)
+        conn = _new_connection(parts, timeout)
     except ValueError as exc:
         raise GraphectoryError(503, f"GRAPHECTORY_URL has an invalid port: {viewer_url!r}") from exc
     data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -276,6 +304,7 @@ def _viewer_json(viewer_url: str, method: str, path: str, body: Any = None) -> A
         raise GraphectoryError(
             502, f"The Graphectory Viewer answered {method} {path} with HTTP {resp.status}"
                  + (f": {detail}" if detail else ""),
+            viewer_status=resp.status,
         )
     if answer is None:
         raise GraphectoryError(502, f"The Graphectory Viewer's answer to {path} is not JSON")
@@ -283,16 +312,27 @@ def _viewer_json(viewer_url: str, method: str, path: str, body: Any = None) -> A
 
 
 def reload_viewer(viewer_url: str, ids: list[str] | None = None) -> None:
-    """Point the Viewer at its data folder again (it reads the folder when
-    its data source is set) and, with `ids`, wait until it lists every one
-    of those graphs. Raises `GraphectoryError`."""
+    """Point a local Viewer at its data folder again (it reads the folder
+    when its data source is set) and, with `ids`, wait until it lists every
+    one of those graphs. Raises `GraphectoryError`."""
     answer = _viewer_json(
         viewer_url, "POST", "/api/config", {"trajs": VIEWER_DATA_PATH, "eval_report": ""},
     )
     if not isinstance(answer, dict) or not answer.get("ok"):
         raise GraphectoryError(502, f"The Graphectory Viewer refused its data folder: {answer}")
-    if not ids:
-        return
+    if ids:
+        wait_until_listed(
+            viewer_url, ids,
+            f"it can't read ATIF or doesn't mount {DATA_DIR} as /data "
+            "(`opendraco status` shows what it mounts). Rebuild it from "
+            f"xiangfengyepan/Graphectory {GRAPHECTORY_BRANCH}: {BUILD_COMMAND}",
+        )
+
+
+def wait_until_listed(viewer_url: str, ids: list[str], hint: str) -> None:
+    """Poll the Viewer's `/api/graphs` until it lists every graph in `ids`.
+    Raises `GraphectoryError` (502, ending with `hint`) when its listing is
+    complete without them, or after `LIST_WAIT_S`."""
     deadline = time.monotonic() + LIST_WAIT_S
     while True:
         listing = _viewer_json(viewer_url, "GET", "/api/graphs")
@@ -304,24 +344,65 @@ def reload_viewer(viewer_url: str, ids: list[str] | None = None) -> None:
         if (isinstance(listing, dict) and listing.get("status") == "complete") \
                 or time.monotonic() > deadline:
             raise GraphectoryError(
-                502, f"The Graphectory Viewer does not list {missing} after reloading -- "
-                     f"it can't read ATIF or doesn't mount {DATA_DIR} as /data "
-                     "(`opendraco status` shows what it mounts). Rebuild it from "
-                     f"xiangfengyepan/Graphectory {GRAPHECTORY_BRANCH}: {BUILD_COMMAND}",
+                502, f"The Graphectory Viewer does not list {missing} after reloading -- {hint}",
             )
         time.sleep(0.5)
 
 
+def upload_run(viewer_url: str, run_id: str, trajectories: list[tuple[str, Path, dict]]) -> None:
+    """Send a run's ATIF trajectories to a Viewer on another machine, one
+    `POST /api/upload` per instance (`{"run_id", "instance_id",
+    "trajectory"}`), then wait until it lists them. The Viewer stores each as
+    `<its upload folder>/<run_id>/<instance_id>/trajectory.json` and switches
+    to that folder itself, so no `/api/config` call is needed.
+
+    Raises `GraphectoryError` (502/504); a Viewer without the endpoint, or
+    with uploads off, gets a message saying how to enable them."""
+    for iid, _path, doc in trajectories:
+        try:
+            answer = _viewer_json(
+                viewer_url, "POST", "/api/upload",
+                {"run_id": run_id, "instance_id": safe_run_id(iid), "trajectory": doc},
+                timeout=UPLOAD_TIMEOUT_S,
+            )
+        except GraphectoryError as exc:
+            if exc.viewer_status == 404:
+                raise GraphectoryError(
+                    502, f"The Graphectory Viewer at {viewer_url} has no upload endpoint -- "
+                         f"update it to xiangfengyepan/Graphectory {GRAPHECTORY_BRANCH} and "
+                         f"start it with `--upload_dir <its data folder>` ({REMOTE_VIEWER_DOC})",
+                    viewer_status=404,
+                ) from exc
+            if exc.viewer_status == 403:
+                raise GraphectoryError(
+                    502, f"The Graphectory Viewer at {viewer_url} refuses uploads -- start it "
+                         f"with `--upload_dir <its data folder>` ({REMOTE_VIEWER_DOC}). "
+                         f"Its answer: {exc}",
+                    viewer_status=403,
+                ) from exc
+            raise
+        if not isinstance(answer, dict) or not answer.get("ok"):
+            raise GraphectoryError(502, f"The Graphectory Viewer did not store the run: {answer}")
+    wait_until_listed(
+        viewer_url, [doc["trajectory_id"] for _, _, doc in trajectories],
+        "it stored the upload but cannot read it as ATIF: update it to "
+        f"xiangfengyepan/Graphectory {GRAPHECTORY_BRANCH}",
+    )
+
+
 # ─── Publishing a run ────────────────────────────────────────────────────────
 def publish_run(viewer_url: str, run_dir: Path, data_dir: Path | None = None) -> dict[str, str]:
-    """Copy a run's ATIF trajectories (`<run_dir>/<instance_id>/trajectory.json`)
-    into the Viewer's data folder, remove old converter-made sessions there,
-    reload the Viewer until it lists every instance, save the links as
+    """Get a run's ATIF trajectories (`<run_dir>/<instance_id>/trajectory.json`)
+    into the Viewer, wait until it lists every instance, save the links as
     `<run_dir>/graphectory-links.json` and return `{instance_id: link}`.
+
+    A Viewer on this machine (`is_local_viewer`) gets them copied into its
+    data folder (old converter-made sessions there are removed) and is told
+    to reload; a Viewer on another machine gets them uploaded (`upload_run`).
 
     Raises `GraphectoryError`: 404 no trajectories in `run_dir`, 500 the
     data folder is not writable, 503 a bad `GRAPHECTORY_URL`, 502/504 the
-    Viewer did not reload, answer or list the run."""
+    Viewer did not reload, accept the upload, answer or list the run."""
     run_dir = Path(run_dir)
     trajectories = _run_trajectories(run_dir)
     if not trajectories:
@@ -330,13 +411,16 @@ def publish_run(viewer_url: str, run_dir: Path, data_dir: Path | None = None) ->
     target = data_dir or DATA_DIR
     run_id = safe_run_id(str(trajectories[0][2].get("session_id") or run_dir.name))
     with _publish_lock:
-        try:
-            clear_legacy_sessions(target)
-            for iid, path, _doc in trajectories:
-                _copy_world_readable(path, target / run_id / safe_run_id(iid) / "trajectory.json")
-        except OSError as exc:
-            raise GraphectoryError(500, f"Could not write the run into {target}: {exc}") from exc
-        reload_viewer(viewer_url, [doc["trajectory_id"] for _, _, doc in trajectories])
+        if is_local_viewer(viewer_url):
+            try:
+                clear_legacy_sessions(target)
+                for iid, path, _doc in trajectories:
+                    _copy_world_readable(path, target / run_id / safe_run_id(iid) / "trajectory.json")
+            except OSError as exc:
+                raise GraphectoryError(500, f"Could not write the run into {target}: {exc}") from exc
+            reload_viewer(viewer_url, [doc["trajectory_id"] for _, _, doc in trajectories])
+        else:
+            upload_run(viewer_url, run_id, trajectories)
     links = {iid: graph_link(viewer_url, doc["trajectory_id"]) for iid, _, doc in trajectories}
     try:
         (run_dir / LINKS_FILE).write_text(json.dumps({"links": links}, indent=2), encoding="utf-8")

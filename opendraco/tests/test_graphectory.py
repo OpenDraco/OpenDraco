@@ -69,13 +69,16 @@ def _graph_id(iid: str) -> str:
 class FakeViewer:
     """Loopback stand-in for the ATIF Graphectory Viewer (the fork's
     feat/atif-mas branch): `POST /api/config` (re)loads `data_dir`,
-    `GET /api/graphs` lists every ATIF file by its `trajectory_id`."""
+    `GET /api/graphs` lists every ATIF file by its `trajectory_id`,
+    `POST /api/upload` stores one trajectory under `data_dir` and loads it
+    (`upload_status` other than 200 makes it answer that error instead)."""
     url: str
     data_dir: Path
     requests: list[tuple[str, str, Any]] = field(default_factory=list)
     config_ok: bool = True
     list_runs: bool = True
     loaded: bool = False
+    upload_status: int = 200
 
 
 @pytest.fixture
@@ -110,6 +113,15 @@ def fake_viewer(tmp_path: Path) -> Iterator[FakeViewer]:
             if self.path == "/api/config" and state.config_ok:
                 state.loaded = True
                 self._send(200, {"ok": True, "trajs": body["trajs"], "agent_type": "atif"})
+            elif self.path == "/api/upload":
+                if state.upload_status != 200:
+                    self._send(state.upload_status, {"error": "Uploads are disabled."})
+                    return
+                target = state.data_dir / body["run_id"] / body["instance_id"] / "trajectory.json"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(body["trajectory"]), encoding="utf-8")
+                state.loaded = True
+                self._send(200, {"ok": True, "trajs": str(state.data_dir), "agent_type": "atif"})
             else:
                 self._send(400, {"error": "bad data source"})
 
@@ -253,6 +265,85 @@ def test_a_viewer_that_never_lists_the_run_names_the_atif_fork(
     assert exc.value.status == 502
     assert _graph_id(IIDS[0]) in str(exc.value)
     assert "feat/atif-mas" in str(exc.value) and "ATIF" in str(exc.value)
+
+
+# ─── A Viewer on another machine: upload ─────────────────────────────────────
+@pytest.mark.parametrize(("url", "local"), [
+    ("http://localhost:9610", True), ("http://127.0.0.1:9610/", True),
+    ("http://LOCALHOST", True), ("http://[::1]:9610", True),
+    ("https://server.example.ts.net:9610", False), ("http://100.117.74.33:9610", False),
+    ("http://192.168.1.20:9610", False),
+])
+def test_only_localhost_is_a_local_viewer(url: str, local: bool) -> None:
+    assert graphectory.is_local_viewer(url) is local
+
+
+@pytest.fixture
+def remote_viewer(fake_viewer: FakeViewer, monkeypatch: pytest.MonkeyPatch) -> FakeViewer:
+    """The stand-in Viewer, treated as being on another machine: its
+    `data_dir` plays the server's upload folder, which OpenDraco cannot see."""
+    monkeypatch.setattr(graphectory, "is_local_viewer", lambda url: False)
+    return fake_viewer
+
+
+def test_publish_uploads_to_a_viewer_on_another_machine(
+    remote_viewer: FakeViewer, run_dir: Path, _isolated_data_dir: Path,
+) -> None:
+    links = graphectory.publish_run(remote_viewer.url, run_dir)
+    assert links == {iid: f"{remote_viewer.url}/api/graph?id={_graph_id(iid)}" for iid in IIDS}
+    uploads = [body for method, path, body in remote_viewer.requests if path == "/api/upload"]
+    assert [(u["run_id"], u["instance_id"]) for u in uploads] == [(RUN_ID, iid) for iid in sorted(IIDS)]
+    for upload in uploads:
+        local = json.loads((run_dir / upload["instance_id"] / "trajectory.json").read_text(encoding="utf-8"))
+        assert upload["trajectory"] == local
+    # The Viewer switches to its upload folder itself: no /api/config, and
+    # nothing is written to this machine's data folder.
+    assert not any(path == "/api/config" for _m, path, _b in remote_viewer.requests)
+    assert not _isolated_data_dir.exists()
+    assert remote_viewer.requests[-1][:2] == ("GET", "/api/graphs")
+    assert json.loads((run_dir / "graphectory-links.json").read_text(encoding="utf-8")) == {"links": links}
+
+
+def test_a_local_viewer_gets_no_upload(fake_viewer: FakeViewer, run_dir: Path) -> None:
+    graphectory.publish_run(fake_viewer.url, run_dir, fake_viewer.data_dir)
+    assert not any(path == "/api/upload" for _m, path, _b in fake_viewer.requests)
+
+
+@pytest.mark.parametrize(("status", "expected"), [
+    (404, "has no upload endpoint"),
+    (403, "refuses uploads"),
+])
+def test_a_viewer_that_cannot_take_uploads_says_how_to_enable_them(
+    remote_viewer: FakeViewer, run_dir: Path, status: int, expected: str,
+) -> None:
+    """404: a Viewer older than the upload endpoint. 403: started without
+    `--upload_dir`."""
+    remote_viewer.upload_status = status
+    with pytest.raises(graphectory.GraphectoryError) as exc:
+        graphectory.publish_run(remote_viewer.url, run_dir)
+    assert exc.value.status == 502 and exc.value.viewer_status == status
+    assert expected in str(exc.value) and "--upload_dir" in str(exc.value)
+    assert not (run_dir / "graphectory-links.json").exists()
+
+
+def test_another_upload_error_keeps_the_viewers_message(
+    remote_viewer: FakeViewer, run_dir: Path,
+) -> None:
+    remote_viewer.upload_status = 500
+    with pytest.raises(graphectory.GraphectoryError) as exc:
+        graphectory.publish_run(remote_viewer.url, run_dir)
+    assert exc.value.status == 502
+    assert "POST /api/upload with HTTP 500: Uploads are disabled." in str(exc.value)
+
+
+def test_an_upload_the_viewer_cannot_read_names_the_atif_fork(
+    remote_viewer: FakeViewer, run_dir: Path,
+) -> None:
+    remote_viewer.list_runs = False
+    with pytest.raises(graphectory.GraphectoryError) as exc:
+        graphectory.publish_run(remote_viewer.url, run_dir)
+    assert exc.value.status == 502
+    assert "stored the upload" in str(exc.value) and "feat/atif-mas" in str(exc.value)
 
 
 @pytest.mark.parametrize("url", ["", "ftp://x", "http://"])

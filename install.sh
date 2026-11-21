@@ -305,8 +305,11 @@ else
 fi
 
 # ── 6b. Set up Graphectory (only when selected in 1a) ────────────────────────
-# Best-effort and idempotent like the SWE-bench step: an existing clone, image
-# or container is left as-is, and any failure is a warning, never an abort.
+# Best-effort and idempotent like the SWE-bench step: a clone of the ATIF fork,
+# its image and its container are left as-is, and any failure is a warning,
+# never an abort. A clone of anything else (stock Graphectory cannot read
+# OpenDraco's ATIF logs) is replaced by the fork, then the image and container
+# are rebuilt from it; a clone holding local work is never removed.
 # OpenDraco itself (`opendraco api`) never touches the container. Updating is
 # manual (docs/graphectory_local.md, "Managing it").
 graphectory_warn() {
@@ -314,20 +317,46 @@ graphectory_warn() {
     echo "          Finish it by hand with docs/graphectory_local.md."
 }
 
+# A repo URL reduced for comparing: lower case, no trailing "/" or ".git".
+graphectory_repo_key() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -e 's#/*$##' -e 's#\.git$##'
+}
+
 setup_graphectory() {
     local url="https://github.com/xiangfengyepan/Graphectory.git"
     local branch="feat/atif-mas"
+    local fresh=0 origin="" head=""
     if [ -d "$GRAPHECTORY_DIR" ]; then
-        echo "[install] Graphectory clone already present at $GRAPHECTORY_DIR (leaving as-is)"
-    else
+        # Only ask git about the folder when it is a clone of its own: inside
+        # the OpenDraco checkout, git would otherwise answer for OpenDraco.
+        if [ -e "$GRAPHECTORY_DIR/.git" ]; then
+            origin="$(git -C "$GRAPHECTORY_DIR" remote get-url origin 2>/dev/null || true)"
+            head="$(git -C "$GRAPHECTORY_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+        fi
+        if [ -n "$origin" ] && [ "$head" = "$branch" ] && \
+           [ "$(graphectory_repo_key "$origin")" = "$(graphectory_repo_key "$url")" ]; then
+            echo "[install] Graphectory clone (ATIF fork, $branch) already present at $GRAPHECTORY_DIR (leaving as-is)"
+        elif [ -z "$origin" ] || \
+             [ -n "$(git -C "$GRAPHECTORY_DIR" status --porcelain 2>/dev/null)" ] || \
+             [ -n "$(git -C "$GRAPHECTORY_DIR" log --branches --not --remotes --oneline 2>/dev/null | head -n 1)" ]; then
+            graphectory_warn "$GRAPHECTORY_DIR is not a clean clone of the ATIF fork ($url, branch $branch): it is not a git clone, or it holds uncommitted or unpushed work. Move it away and rerun."
+            return 0
+        else
+            echo "[install] replacing the Graphectory clone of $origin ($head) with the ATIF fork"
+            rm -rf "$GRAPHECTORY_DIR"
+        fi
+    fi
+    if [ ! -d "$GRAPHECTORY_DIR" ]; then
         echo "[install] cloning $url ($branch) into $GRAPHECTORY_DIR"
         if ! git clone -b "$branch" "$url" "$GRAPHECTORY_DIR"; then
             graphectory_warn "cloning $url failed."
             return 0
         fi
+        fresh=1
     fi
 
-    if docker image inspect "$GRAPHECTORY_IMAGE" >/dev/null 2>&1; then
+    # A fresh clone means any existing image was built from something else.
+    if [ "$fresh" = 0 ] && docker image inspect "$GRAPHECTORY_IMAGE" >/dev/null 2>&1; then
         echo "[install] Docker image '$GRAPHECTORY_IMAGE' already built (leaving as-is)"
     else
         echo "[install] building the '$GRAPHECTORY_IMAGE' Docker image (a few minutes)"
@@ -337,6 +366,12 @@ setup_graphectory() {
         fi
     fi
 
+    # A container made from the previous image still runs the old Viewer.
+    if [ "$fresh" = 1 ] && docker container inspect "$GRAPHECTORY_CONTAINER" >/dev/null 2>&1; then
+        echo "[install] removing the '$GRAPHECTORY_CONTAINER' container made from the previous image"
+        docker rm -f "$GRAPHECTORY_CONTAINER" >/dev/null || \
+            graphectory_warn "removing the old container failed."
+    fi
     if docker container inspect "$GRAPHECTORY_CONTAINER" >/dev/null 2>&1; then
         echo "[install] container '$GRAPHECTORY_CONTAINER' already exists (leaving as-is; \`opendraco status\` checks it)"
     else

@@ -664,7 +664,7 @@ def status() -> None:
             "not configured (optional) -- set GRAPHECTORY_URL in opendraco/.env "
             '(e.g. "http://localhost:9610") to show Graphectory on the Results page',
         )
-    else:
+    elif graphectory.is_local_viewer(graphectory_url):
         if _graphectory_reachable(graphectory_url):
             _print_check(_OK, "graphectory server", graphectory_url)
         else:
@@ -674,6 +674,20 @@ def status() -> None:
                 f"'{graphectory.CONTAINER}' container running? (it must answer GET / with 200)",
             )
         _print_graphectory_container(graphectory_url)
+    else:
+        # A Viewer on another machine: runs are uploaded to it, so this
+        # machine's Docker image and container are not involved.
+        if _graphectory_reachable(graphectory_url):
+            _print_check(
+                _OK, "graphectory server",
+                f"{graphectory_url} (another machine: runs are uploaded to it)",
+            )
+        else:
+            _print_check(
+                _WARN, "graphectory server",
+                f"not reachable at {graphectory_url} -- check the URL (http or https, host, "
+                "port) and that the Viewer is running there (it must answer GET / with 200)",
+            )
 
     typer.echo("")
     raise typer.Exit(0)

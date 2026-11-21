@@ -338,13 +338,21 @@ if (-not ($dockerOk -and $wslOk)) {
 }
 
 # --- 6b. Set up Graphectory (only when selected in 1a) -----------------------
-# Best-effort and idempotent like the SWE-bench step: an existing clone, image
-# or container is left as-is, and any failure is a warning, never an abort.
+# Best-effort and idempotent like the SWE-bench step: a clone of the ATIF fork,
+# its image and its container are left as-is, and any failure is a warning,
+# never an abort. A clone of anything else (stock Graphectory cannot read
+# OpenDraco's ATIF logs) is replaced by the fork, then the image and container
+# are rebuilt from it; a clone holding local work is never removed.
 # OpenDraco itself (`opendraco api`) never touches the container. Updating is
 # manual (docs\graphectory_local.md, "Managing it").
 function Write-GraphectoryWarning($message) {
     Write-Host "[install] warning: $message" -ForegroundColor Yellow
     Write-Host "          Finish it by hand with docs\graphectory_local.md." -ForegroundColor Yellow
+}
+
+# A repo URL reduced for comparing: lower case, no trailing "/" or ".git".
+function Get-GraphectoryRepoKey($repoUrl) {
+    return ("$repoUrl".Trim().ToLowerInvariant() -replace '/+$', '') -replace '\.git$', ''
 }
 
 function Install-Graphectory {
@@ -356,19 +364,45 @@ function Install-Graphectory {
 
     $url = "https://github.com/xiangfengyepan/Graphectory.git"
     $branch = "feat/atif-mas"
+    $fresh = $false
     if (Test-Path $GraphectoryDir) {
-        Write-Host "[install] Graphectory clone already present at $GraphectoryDir (leaving as-is)" -ForegroundColor Cyan
-    } else {
+        # Only ask git about the folder when it is a clone of its own: inside
+        # the OpenDraco checkout, git would otherwise answer for OpenDraco.
+        $origin = ""; $head = ""; $dirty = ""; $unpushed = ""
+        if (Test-Path (Join-Path $GraphectoryDir ".git")) {
+            $origin   = "$(git -C $GraphectoryDir remote get-url origin 2>$null)".Trim()
+            $head     = "$(git -C $GraphectoryDir rev-parse --abbrev-ref HEAD 2>$null)".Trim()
+            $dirty    = "$(git -C $GraphectoryDir status --porcelain 2>$null)".Trim()
+            $unpushed = "$(git -C $GraphectoryDir log --branches --not --remotes --oneline 2>$null)".Trim()
+        }
+        if ($origin -and $head -eq $branch -and
+            (Get-GraphectoryRepoKey $origin) -eq (Get-GraphectoryRepoKey $url)) {
+            Write-Host "[install] Graphectory clone (ATIF fork, $branch) already present at $GraphectoryDir (leaving as-is)" -ForegroundColor Cyan
+        } elseif (-not $origin -or $dirty -or $unpushed) {
+            Write-GraphectoryWarning "$GraphectoryDir is not a clean clone of the ATIF fork ($url, branch $branch): it is not a git clone, or it holds uncommitted or unpushed work. Move it away and rerun."
+            return
+        } else {
+            Write-Host "[install] replacing the Graphectory clone of $origin ($head) with the ATIF fork" -ForegroundColor Cyan
+            Remove-Item -LiteralPath $GraphectoryDir -Recurse -Force -ErrorAction SilentlyContinue
+            if (Test-Path $GraphectoryDir) {
+                Write-GraphectoryWarning "could not remove the old clone at $GraphectoryDir (a file is in use?)."
+                return
+            }
+        }
+    }
+    if (-not (Test-Path $GraphectoryDir)) {
         Write-Host "[install] cloning $url ($branch) into $GraphectoryDir" -ForegroundColor Cyan
         git clone -b $branch $url $GraphectoryDir
         if ($LASTEXITCODE -ne 0) {
             Write-GraphectoryWarning "cloning $url failed."
             return
         }
+        $fresh = $true
     }
 
+    # A fresh clone means any existing image was built from something else.
     docker image inspect $GraphectoryImage 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if ($LASTEXITCODE -eq 0 -and -not $fresh) {
         Write-Host "[install] Docker image '$GraphectoryImage' already built (leaving as-is)" -ForegroundColor Cyan
     } else {
         Write-Host "[install] building the '$GraphectoryImage' Docker image (a few minutes)" -ForegroundColor Cyan
@@ -379,6 +413,13 @@ function Install-Graphectory {
         }
     }
 
+    # A container made from the previous image still runs the old Viewer.
+    docker container inspect $GraphectoryContainer 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0 -and $fresh) {
+        Write-Host "[install] removing the '$GraphectoryContainer' container made from the previous image" -ForegroundColor Cyan
+        docker rm -f $GraphectoryContainer 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-GraphectoryWarning "removing the old container failed." }
+    }
     docker container inspect $GraphectoryContainer 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[install] container '$GraphectoryContainer' already exists (leaving as-is; 'opendraco status' checks it)" -ForegroundColor Cyan
